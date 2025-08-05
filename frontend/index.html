@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Semantic UI Grid Equal Height</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/semantic-ui@2.4.2/dist/semantic.min.css">
+  <script src="https://code.jquery.com/jquery-3.1.1.min.js"
+          integrity="sha256-hVVnYaiADRTO2PzUGmuLJr8BLUSjGIZsDYGmIJLv2b8="
+          crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/semantic-ui@2.4.2/dist/semantic.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/flowbite@3.1.2/dist/flowbite.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/flowbite@3.1.2/dist/flowbite.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+
+  <script src="script.js"></script>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .ui.grid.equal-height {
+      display: flex;
+      flex-wrap: wrap;
+    }
+
+    .ui.grid.equal-height > .column {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .ui.grid.equal-height > .column > .ui.segment {
+      flex: 1;
+    }
+  </style>
+</head>
+<body>
+
+<div class="ui grid">
+  <div class="four wide column sidebar-column" id="sidebar">
+    <div class="ui vertical menu full-height" id="menu">
+      <div class="menu-content">
+        <div class="item">
+          <div class="header">Products</div>
+          <div class="menu">
+            <div class="item">
+              <div class="ui icon input">
+                <input type="text" placeholder="Search mail...">
+                <i class="search icon"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="item">
+          <div class="menu">
+            <a class="item" data-section="rails"><i class="chart line icon"></i>Dashboard</a>
+            <a class="item" data-section="Defeitos"><i class="times circle outline icon"></i>Defeitos</a>
+            <a class="item" data-section="Recomendações"><i class="boxes icon"></i>Recomendações</a>
+            <a class="item" data-section="Exportar"><i class="upload icon"></i>Exportar Relatório</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="item profile-bottom">
+        <div class="header">Support</div>
+        <div class="menu">
+          <a class="item horizontal" href="#perfil">
+            <img class="ui mini circular image" src="https://semantic-ui.com/images/avatar2/small/molly.png">
+            <div class="content profile-content">
+              <div class="ui sub header">Molly</div>
+              Coordinator
+            </div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="twelve wide column">
+    <button class="ui icon button" id="toggleMenu" style="margin-bottom: 1em;">
+      <i class="bars icon"></i>
+    </button>
+
+    <div id="rails" class="ui  content-section">
+      <div class="ui grid equal-height">
+        <div class="eight wide column">
+          <div class="ui rounded segment">
+            <h3>Defeitos Detectados<span>
+              <div class="ui inline dropdown">
+                <div class="text">
+                  Filtrar por Gravidade <i class="angle down icon"></i>
+                </div>
+                <div class="menu">
+                  <div class="item">
+                    Jenny Hess
+                  </div>
+                  <div class="item">
+                    Elliot Fu
+                  </div>
+                  <div class="item">
+                    Stevie Feliciano
+                  </div>
+                  <div class="item">
+                    Christian
+                  </div>
+                  <div class="item">
+                    Matt
+                  </div>
+                  <div class="item">
+                    Justen Kitsune
+                  </div>
+                </div>
+              </div>
+            </span>
+          </h3>
+            </h3>
+            
+
+            <!--lista-->
+            <div class="ui relaxed divided list">
+              <div class="lista">
+                <img src="https://soystats.com/wp-content/uploads/single-soybean-1024x851.jpg" alt="">
+                <div class="content">
+                  <a class="header">Mofo</a>
+                  <div class="description">Lorem ipsum dolor sit amet consectetur, adipisicing elit.</div>
+                </div>
+              </div>
+              <div class="lista">
+                <img src="https://soystats.com/wp-content/uploads/single-soybean-1024x851.jpg" alt="">
+                <div class="content">
+                  <a class="header">Fissura</a>
+                  <div class="description">Lorem ipsum dolor sit amet consectetur, adipisicing elit.</div>
+                </div>
+              </div>
+              <div class="lista">
+                <img src="https://soystats.com/wp-content/uploads/single-soybean-1024x851.jpg" alt="">
+                <div class="content">
+                  <a class="header">Descoloração</a>
+                  <div class="description">Lorem ipsum dolor sit amet consectetur, adipisicing elit.</div>
+                </div>
+              </div>
+              <div class="lista">
+                <img src="https://soystats.com/wp-content/uploads/single-soybean-1024x851.jpg" alt="">
+                <div class="content">
+                  <a class="header">Descoloração</a>
+                  <div class="description">Lorem ipsum dolor sit amet consectetur, adipisicing elit.</div>
+                </div>
+              </div>
+              <div class="lista">
+                <img src="https://soystats.com/wp-content/uploads/single-soybean-1024x851.jpg" alt="">
+                <div class="content">
+                  <a class="header">Descoloração</a>
+                  <div class="description">Lorem ipsum dolor sit amet consectetur, adipisicing elit.</div>
+                </div>
+              </div>
+              <div class="lista">
+                <img src="https://soystats.com/wp-content/uploads/single-soybean-1024x851.jpg" alt="">
+                <div class="content">
+                  <a class="header">Descoloração</a>
+                  <div class="description">Lorem ipsum dolor sit amet consectetur, adipisicing elit.</div>
+                </div>
+              </div>
+            </div>
+
+            <a href="" class="todosD">Todos os defeitos <i class="arrow right icon"></i></a>
+
+          </div>
+        </div>
+        <div class="eight wide column">
+          <div class="ui rounded segment">
+            <div class="ui grid">
+              <div class="column">
+                <div class="ui">
+                    <!--grafico-->
+                    <div class="w-full bg-white rounded-lg shadow-sm dark:bg-gray-800 p-2 md:p-3">
+                      <div class="flex justify-between items-start mb-2">
+                        <h5 class="font-bold text-gray-900 dark:text-white m-0 leading-none">Crescimento</h5>
+                    
+                        <div class="flex items-center m-0 leading-none">
+                          <button
+                            id="dropdownDefaultButton"
+                            data-dropdown-toggle="lastDaysdropdown"
+                            data-dropdown-placement="bottom"
+                            class="text-gray-500 dark:text-gray-400 hover:text-gray-900 text-center inline-flex items-center dark:hover:text-white text-sm"
+                            type="button">
+                            Last 7 days
+                            <svg class="w-2.5 ms-1.5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 10 6">
+                              <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m1 1 4 4 4-4"/>
+                            </svg>
+                          </button>
+                    
+                          <!-- Dropdown menu -->
+                          <div id="lastDaysdropdown" class="z-10 hidden bg-white divide-y divide-gray-100 rounded-lg shadow-sm w-44 dark:bg-gray-700">
+                            <ul class="py-2 text-sm text-gray-700 dark:text-gray-200" aria-labelledby="dropdownDefaultButton">
+                              <li><a href="#" class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">Yesterday</a></li>
+                              <li><a href="#" class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">Today</a></li>
+                              <li><a href="#" class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">Last 7 days</a></li>
+                              <li><a href="#" class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">Last 30 days</a></li>
+                              <li><a href="#" class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">Last 90 days</a></li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    
+                      <div id="area-chart"></div>
+                    </div>
+                    
+
+                </div>
+              </div>
+            </div>
+
+            <div class="ui three column grid">
+              <div class="column">
+                <div class="ui rounded segment titulo">
+                  <h4>Top Mês</h4>
+                  <h2 class="mes">Novembro</h2>
+                  <h5 class="ano">2025</h5>
+                </div>
+
+              </div>
+              <div class="column">
+                <div class="ui rounded segment titulo">
+                  <h4>Melhor Ano</h4>
+                  <h2 class="mes">2025</h2>
+                  <h5 class="crescimento">80% de crescimento</h5>
+                </div>
+              </div>
+              <div class="column">
+                <div class="ui rounded segment titulo">
+                  <h4>Melhor Semente</h4>
+                  <h2 class="mes"><img src="https://soystats.com/wp-content/uploads/single-soybean-1024x851.jpg" alt=""></h2>
+                  <h5 class="crescimento">Semente de trigo</h5>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ui grid equal-height">
+        <div class="nine wide column">
+          
+          <div class="ui rounded segment flex flex-col md:flex-row gap-4">
+            <div class="center flex flex-col items-center">
+              <!-- Circular Progress -->
+              <div class="relative w-40 h-40 md:w-64 md:h-64 flex items-center justify-center">
+                <svg class="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="18" cy="18" r="16" fill="none" class="stroke-current text-gray-200 dark:text-neutral-700" stroke-width="2"></circle>
+                  <circle cx="18" cy="18" r="16" fill="none" class="stroke-current text-red-600 dark:text-blue-500" stroke-width="2" stroke-dasharray="100" stroke-dashoffset="65" stroke-linecap="round"></circle>
+                </svg>
+                <span class="text-center text-sm font-bold text-red-600 dark:text-red-500 z-10">35%</span>
+              </div>
+              <h2>Defeitos</h2>
+            </div>
+          
+            <div class="center flex flex-col items-center">
+              <!-- Circular Progress -->
+              <div class="relative w-40 h-40 md:w-64 md:h-64 flex items-center justify-center">
+                <svg class="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="18" cy="18" r="16" fill="none" class="stroke-current text-gray-200 dark:text-neutral-700" stroke-width="2"></circle>
+                  <circle cx="18" cy="18" r="16" fill="none" class="stroke-current text-green-600 dark:text-blue-500" stroke-width="2" stroke-dasharray="100" stroke-dashoffset="65" stroke-linecap="round"></circle>
+                </svg>
+                <span class="text-center text-sm font-bold text-green-600 dark:text-green-500 z-10">35%</span>
+              </div>
+              <h2>Qualidades</h2>
+            </div>
+          
+            <div class="center flex flex-col items-center">
+              <!-- Circular Progress -->
+              <div class="relative w-40 h-40 md:w-64 md:h-64 flex items-center justify-center">
+                <svg class="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="18" cy="18" r="16" fill="none" class="stroke-current text-gray-200 dark:text-neutral-700" stroke-width="2"></circle>
+                  <circle cx="18" cy="18" r="16" fill="none" class="stroke-current text-blue-600 dark:text-blue-500" stroke-width="2" stroke-dasharray="100" stroke-dashoffset="65" stroke-linecap="round"></circle>
+                </svg>
+                <span class="text-center text-sm font-bold text-blue-600 dark:text-blue-500 z-10">35%</span>
+              </div>
+              <h2>Prob. Crescimento</h2>
+            </div>
+          </div>
+          
+        </div>
+        <div class="seven wide column">
+          
+          <div class="ui rounded segment">
+            <h3>Recomendações</h3>
+             <!--lista-->
+             <div class="ui relaxed divided list">
+              <div class="lista">
+                <img src="https://soystats.com/wp-content/uploads/single-soybean-1024x851.jpg" alt="">
+                <div class="content">
+                  <a class="header">Mofo</a>
+                </div>
+              </div>
+              <div class="lista">
+                <img src="https://soystats.com/wp-content/uploads/single-soybean-1024x851.jpg" alt="">
+                <div class="content">
+                  <a class="header">Fissura</a>
+                </div>
+              </div>
+            </div>
+            <a href="" class="todosD">Todas as recomendações <i class="arrow right icon"></i></a>
+          </div>
+        </div>
+      </div>  
+    </div>
+
+    <div id="Defeitos" class="ui segment content-section">
+      <h3>Python</h3>
+      <p>CMS solutions using Django or Flask, ideal for custom web applications.</p>
+    </div>
+    <div id="Recomendações" class="ui segment content-section">
+      <h3>PHP</h3>
+      <p>Popular CMS platforms like WordPress, Joomla, and Drupal powered by PHP.</p>
+    </div>
+    <div id="Exportar" class="ui segment content-section">
+      <h3>Shared Hosting</h3>
+      <p>Affordable hosting plans for personal or small business websites.</p>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
