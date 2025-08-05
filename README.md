@@ -74,7 +74,7 @@ Características:
 
 - Após o download, insira o caminho local do dataset na variável `data_dir` nos seguintes arquivos:  
     - `identificarSementesModelo.py`  
-    - `vaeTreinamento.py` (ou o nome equivalente ao script de treino do VAE-GAN)
+    - `vaeTreinamento.py`
 
 ## Referências
 
