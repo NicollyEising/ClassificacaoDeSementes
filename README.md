@@ -23,10 +23,6 @@ Este projeto implementa um sistema baseado em visão computacional para identifi
 
 ## Treinamento do Gerador VAE-GAN
 
-O treinamento utiliza um modelo VAE com blocos residuais e duas redes discriminadoras (WGAN-GP). As imagens geradas são salvas a cada 200 iterações.
-
-    python vae_gan_treino.py
-
 Parâmetros principais:  
 - LATENT_DIM = 512  
 - IMG_SIZE = 128  
@@ -37,35 +33,6 @@ Saídas:
 - Reconstruções reais e geradas (debug/ep*_fake.png)  
 - Amostras aleatórias condicionadas a rótulos  
 - Interpolações latentes  
-
-## Geração de Amostras Sintéticas
-
-Gera imagens sintéticas de sementes condicionadas às classes aprendidas:
-
-    gerar_amostras('vae_wgp.pth', 'amostras', num_imgs=100)  
-
-## Classificação Supervisionada com ResNet18
-
-Treinamento de um classificador para as cinco classes de sementes:
-
-    python classificador_resnet18.py  
-
-Fluxo:  
-- Pré-processamento com transforms.Compose  
-- Treinamento com CrossEntropyLoss  
-- Avaliação com classification_report e matriz de confusão  
-- Predição de imagem individual via predict_image('caminho_da_imagem.png')  
-
-## Identificação em Tempo Real com Webcam
-
-Executa captura em tempo real e detecção de sementes por contornos:
-
-    python identificar_sementes_webcam.py  
-
-Características:  
-- Filtragem por área, circularidade e proporção  
-- Classificação com limiar de confiança  
-- Exibição da predição na tela com cv2.putText  
 
 ## Instruções
 
