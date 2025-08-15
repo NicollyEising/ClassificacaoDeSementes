@@ -13,6 +13,17 @@ h3,
   color: #333;
 }
 
+body {
+  background-color: #f1f8f4; /* Fundo verde suave */
+  font-family: 'Inter', 'Segoe UI', Roboto, sans-serif;
+  padding: 1rem;
+  color: #222;
+}
+
+.teste{
+  display: block!important;
+}
+
 /* Cabeçalhos */
 h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
@@ -274,6 +285,21 @@ a{
   margin-bottom: 1em;
 }
 
+.titulo1{
+
+  height: 110%; /* ajuste a altura para o valor desejado */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.titulo2{
+font-size: 1.4rem !important;
+  font-weight: 600;
+  color: #222;
+  margin-bottom: 0.5em;
+}
+
 .mes{
   margin-bottom: -20px;
   color: saddlebrown;
@@ -284,7 +310,7 @@ a{
 }
 
 .crescimento{
-  color: rgb(127, 127, 127);
+  color: rgb(91, 91, 91);
 }
 
 .mes img{
@@ -297,6 +323,17 @@ a{
   align-items: center;
   flex-direction: column;
 }
+
+.qrcodetitulo{
+  font-size: 4rem !important;
+  margin: 30px 0 20px 0;
+}
+
+.items-center h2{
+  margin-top: 1em;
+  font-size: 1.2rem !important;
+}
+
 @media screen and (max-width: 768px) {
   .lista {
     flex-direction: column !important;
@@ -341,5 +378,15 @@ a{
   .ui.segment {
     padding: 1em !important;
     margin-bottom: 1em !important;
+  }
+
+  /* Faz a coluna principal ocupar 100% */
+  .twelve.wide.column {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  /* Ajusta o botão para grudar à esquerda */
+  #toggleMenu {
+    margin-left: 0 !important;
   }
 }

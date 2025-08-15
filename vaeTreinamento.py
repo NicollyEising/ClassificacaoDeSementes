@@ -13,7 +13,7 @@ IMG_SIZE      = 128
 BATCH_SIZE    = 32
 LATENT_DIM    = 512
 
-EPOCHS        = 70
+EPOCHS        = 50
 WARM_REC_EPS  = 2
 
 LR_GEN        = 2e-4
@@ -168,7 +168,6 @@ def train(data_dir):
             else:
                 lossD = torch.tensor(0.0, device=DEVICE)
 
-
             fake, mu, lv = vae(x, oh)
             fake         = fake.clamp(-1, 1)
             rec          = 0.3 * F.l1_loss(fake, x) + 0.7 * lpips_loss(fake, x).mean()
@@ -193,7 +192,6 @@ def train(data_dir):
             totG += lossG.item()
 
             if i % 200 == 0:
-                # Reconstrução
                 utils.save_image((fake[:16] + 1) / 2, f'debug/ep{ep}_batch{i}_fake.png', nrow=4)
                 utils.save_image((x[:16] + 1)    / 2, f'debug/ep{ep}_batch{i}_real.png', nrow=4)
                 with torch.no_grad():
@@ -222,10 +220,19 @@ def train(data_dir):
 
 # ----------- Geração de Amostras após o Treino ---------
 def gerar_amostras(peso_arquivo, pasta_saida, num_imgs=100):
+    categorias = [
+        "Broken soybeans",
+        "Immature soybeans",
+        "Intact soybeans",
+        "Skin-damaged soybeans",
+        "Spotted soybeans"
+    ]
+    
     os.makedirs(pasta_saida, exist_ok=True)
 
     checkpoint = torch.load(peso_arquivo, map_location=DEVICE)
     n_cls = checkpoint['num_classes']
+    assert n_cls == len(categorias), f"Esperado {len(categorias)} classes, mas o modelo tem {n_cls}."
 
     vae = VAE(LATENT_DIM, n_cls).to(DEVICE)
     vae.load_state_dict(checkpoint['model'])
@@ -238,8 +245,13 @@ def gerar_amostras(peso_arquivo, pasta_saida, num_imgs=100):
             oh = F.one_hot(y, n_cls).float().to(DEVICE)
 
             fake = vae.generate(z, oh).clamp(-1, 1)
-            utils.save_image((fake + 1) / 2,
-                             f'{pasta_saida}/amostra_{i:03d}.png')
+
+            classe_nome = categorias[y.item()]
+            pasta_classe = os.path.join(pasta_saida, classe_nome)
+            os.makedirs(pasta_classe, exist_ok=True)
+
+            caminho_arquivo = os.path.join(pasta_classe, f'amostra_{i:03d}.png')
+            utils.save_image((fake + 1) / 2, caminho_arquivo)
 
 # ----------------------- Main -------------------------
 if __name__ == "__main__":

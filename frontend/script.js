@@ -9,10 +9,7 @@ $(document).ready(function () {
     $('#' + section).show();
   });
 
-  // Toggle da barra lateral
-  $('#toggleMenu').on('click', function () {
-    $('#sidebar').toggleClass('collapsed');
-  });
+
 
   // Configuração do gráfico ApexCharts
   const options = {
@@ -82,5 +79,18 @@ $(document).ready(function () {
   if (chartElement && typeof ApexCharts !== 'undefined') {
     const chart = new ApexCharts(chartElement, options);
     chart.render();
+  }
+
+  const sidebars = document.getElementsByClassName('sidebar-column');
+  const toggleButton = document.getElementById('toggleMenu');
+  
+  if (toggleButton) {
+    toggleButton.addEventListener('click', function () {
+      for (let i = 0; i < sidebars.length; i++) {
+        sidebars[i].style.display = (sidebars[i].style.display === 'none' || sidebars[i].style.display === '') 
+          ? 'block' 
+          : 'none';
+      }
+    });
   }
 });
