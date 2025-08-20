@@ -124,7 +124,7 @@ O projeto adotará a metodologia **FDD (Feature Driven Development)**, com foco 
 * **Backend:** AWS
 * **Banco de Dados:** PostgreSQL
 * **CI/CD:** GitHub
-* **Trello:** https://trello.com/b/CmD4xiWe/tcc-sementes
+* **Trello:** [https://trello.com/b/CmD4xiWe/tcc-sementes](https://trello.com/invite/b/685d4eeaf96fcde6078ed7f5/ATTI76bb8e9cc67c70b8f9d4caa659261bbb04B8600D/tcc-sementes)
 
 ---
 
