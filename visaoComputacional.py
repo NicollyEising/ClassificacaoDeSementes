@@ -40,7 +40,7 @@ class_names = [
 model = model.to(device).eval()
 
 # ---------- parâmetros principais ----------
-IMAGE_PATH = r"C:\Users\faculdade\.cache\kagglehub\datasets\warcoder\soyabean-seeds\versions\2\Soybean Seeds\Spotted soybeans\10.jpg"
+IMAGE_PATH = r"C:\Users\faculdade\Desktop\SementesVisaoComputacional\amostras1\amostra_020.png"
 
 OUT_DIR = Path("debug_rois")
 OUT_DIR.mkdir(exist_ok=True)

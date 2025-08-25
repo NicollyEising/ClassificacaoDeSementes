@@ -1,27 +1,36 @@
 import os
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision import datasets, transforms, utils
+from torchvision import datasets, transforms, utils, models
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import lpips
+from PIL import Image
+import numpy as np
 
 # ------------------- Hiperparâmetros -------------------
 DEVICE        = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 IMG_SIZE      = 128
 BATCH_SIZE    = 32
 LATENT_DIM    = 512
-
-EPOCHS        = 50
+EPOCHS        = 200
 WARM_REC_EPS  = 2
-
 LR_GEN        = 2e-4
 LR_DISC       = 5e-5
 BASE_KLD      = 1e-2
 BASE_ADV      = 5e-2
-BETA          = 50
+BETA          = 75
 R1_GAMMA      = 10.0
+
+categorias = [
+    "Broken soybeans",
+    "Immature soybeans",
+    "Intact soybeans",
+    "Skin-damaged soybeans",
+    "Spotted soybeans"
+]
 
 # ------------------- Bloco residual up -----------------
 class ResBlockUp(nn.Module):
@@ -59,7 +68,6 @@ class VAE(nn.Module):
         self.lv      = nn.Linear(self.flat, z_dim)
         self.fc      = nn.Linear(z_dim + n_cls, self.flat)
 
-        # Camada de saída do decoder
         self.decoder = nn.Sequential(
             nn.Unflatten(1, (512, IMG_SIZE // 16, IMG_SIZE // 16)),
             ResBlockUp(512, 256),
@@ -121,8 +129,29 @@ def r1_penalty(discriminator, real):
     grad     = torch.autograd.grad(pred, real_req, create_graph=True)[0]
     return grad.view(real_req.size(0), -1).pow(2).sum(1).mean()
 
-# ------------------- Treino ---------------------------
-def train(data_dir):
+def load_classifier():
+    # função mantida para compatibilidade; pode ser removida se não utilizada
+    model = models.resnet18(pretrained=True)
+    model.fc = nn.Linear(model.fc.in_features, len(categorias))
+    model = model.to(DEVICE)
+    model.eval()
+    return model
+
+
+def train(data_dir, checkpoint_path="checkpoint.pth", best_model_path="best_model_vae.pth", seed: int = 0, resume: bool = False, single_class: bool = True):
+    """Treina um VAE (possivelmente em modo single-class).
+
+    Args:
+        data_dir: pasta contendo as imagens (estrutura compatível com ImageFolder).
+        checkpoint_path: caminho do checkpoint temporário.
+        best_model_path: arquivo onde será salvo o melhor modelo (contém 'model' e 'num_classes').
+        seed: semente aleatória.
+        resume: se True, tenta retomar do checkpoint_path.
+        single_class: se True, mapeia todos os rótulos para classe 0 e treina com n_cls=1.
+    Returns:
+        n_cls (int): número de classes usadas no treinamento.
+    """
+    torch.manual_seed(seed)
     tf = transforms.Compose([
         transforms.Resize(IMG_SIZE),
         transforms.CenterCrop(IMG_SIZE),
@@ -134,33 +163,68 @@ def train(data_dir):
     ])
 
     ds = datasets.ImageFolder(data_dir, tf)
-    dl = DataLoader(ds, BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
-    n_cls = len(ds.classes)
+    ds_classes = ds.classes
+    # validações mínimas
+    for c in ds_classes:
+        if c not in categorias and not single_class:
+            raise ValueError(f"Classe '{c}' não está em 'categorias'.")
+
+    # Se pedirmos treino por categoria (modo único), definimos n_cls=1 e mapeamos tudo para a classe 0
+    if single_class:
+        n_cls = 1
+    else:
+        n_cls = len(categorias)
+
+    dl = DataLoader(ds, BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=True)
+
+    # Se não quisermos retomar e o checkpoint existir, removemos para começar do zero
+    if os.path.exists(checkpoint_path) and not resume:
+        try:
+            os.remove(checkpoint_path)
+        except Exception:
+            pass
 
     vae  = VAE(LATENT_DIM, n_cls).to(DEVICE)
     d1   = D().to(DEVICE)
     d2   = D().to(DEVICE)
     optG = torch.optim.AdamW(vae.parameters(), lr=LR_GEN, betas=(0.5, 0.999))
-    optD = torch.optim.AdamW(
-        list(d1.parameters()) + list(d2.parameters()),
-        lr=LR_DISC, betas=(0.5, 0.999)
-    )
+    optD = torch.optim.AdamW(list(d1.parameters()) + list(d2.parameters()), lr=LR_DISC, betas=(0.5, 0.999))
+
+    start_epoch = 1
+    best_loss_g = float("inf")
+    if resume and os.path.exists(checkpoint_path):
+        ckpt = torch.load(checkpoint_path, map_location=DEVICE)
+        vae.load_state_dict(ckpt["vae"])
+        d1.load_state_dict(ckpt["d1"])
+        d2.load_state_dict(ckpt["d2"])
+        optG.load_state_dict(ckpt["optG"])
+        optD.load_state_dict(ckpt["optD"])
+        start_epoch = ckpt["epoch"] + 1
+        best_loss_g = ckpt.get("best_loss_g", best_loss_g)
+        print(f"Checkpoint carregado: retomando da época {start_epoch}")
 
     os.makedirs('debug', exist_ok=True)
+    # classifier carregado apenas se necessário
+    classifier = load_classifier()
 
-    for ep in range(1, EPOCHS + 1):
+    for ep in range(start_epoch, EPOCHS + 1):
         totG = 0.0
-        for i, (x, y) in enumerate(tqdm(dl, desc=f'Época {ep}/{EPOCHS}')):
-            x  = x.to(DEVICE)
+        for i, (x, y_ds) in enumerate(tqdm(dl, desc=f'Época {ep}/{EPOCHS}')):
+            x = x.to(DEVICE)
+            if single_class:
+                # mapeia todos os rótulos para 0 (apenas uma classe)
+                y = torch.zeros(x.size(0), dtype=torch.long, device=DEVICE)
+            else:
+                y = torch.tensor([categorias.index(ds.classes[int(v)]) for v in y_ds], dtype=torch.long, device=DEVICE)
             oh = F.one_hot(y, n_cls).float().to(DEVICE)
 
             fake, mu, lv = vae(x, oh)
-            fake_det     = fake.detach()
+            fake_det = fake.detach()
             optD.zero_grad()
             if ep > WARM_REC_EPS:
                 lossD = 0.0
                 for Dm, sz in [(d1, IMG_SIZE), (d2, IMG_SIZE//2)]:
-                    real   = x if sz == IMG_SIZE else F.interpolate(x, (sz, sz))
+                    real = x if sz == IMG_SIZE else F.interpolate(x, (sz, sz))
                     fake_s = fake_det if sz == IMG_SIZE else F.interpolate(fake_det, (sz, sz))
                     lossD += -(Dm(real).mean() - Dm(fake_s).mean()) + R1_GAMMA * r1_penalty(Dm, real)
                 lossD.backward()
@@ -169,21 +233,19 @@ def train(data_dir):
                 lossD = torch.tensor(0.0, device=DEVICE)
 
             fake, mu, lv = vae(x, oh)
-            fake         = fake.clamp(-1, 1)
-            rec          = 0.3 * F.l1_loss(fake, x) + 0.7 * lpips_loss(fake, x).mean()
-
+            fake = fake.clamp(-1, 1)
+            rec = 0.3 * F.l1_loss(fake, x) + 0.7 * lpips_loss(fake, x).mean()
             if ep > WARM_REC_EPS:
-                adv    = 0.0
+                adv = 0.0
                 for Dm, sz in [(d1, IMG_SIZE), (d2, IMG_SIZE//2)]:
                     f = fake if sz == IMG_SIZE else F.interpolate(fake, (sz, sz))
                     adv += -Dm(f).mean()
-                λ_adv = BASE_ADV * ((ep - WARM_REC_EPS) / (EPOCHS - WARM_REC_EPS))**2
+                λ_adv = BASE_ADV * ((ep - WARM_REC_EPS) / (EPOCHS - WARM_REC_EPS))**2 * 1.5
                 λ_kld = BASE_KLD
             else:
-                adv    = torch.tensor(0.0, device=DEVICE)
-                λ_adv  = 0.0
-                λ_kld  = 0.0
-
+                adv = torch.tensor(0.0, device=DEVICE)
+                λ_adv = 0.0
+                λ_kld = 0.0
             lossG = rec + BETA * λ_kld * kld(mu, lv) + λ_adv * adv
             optG.zero_grad()
             lossG.backward()
@@ -192,69 +254,90 @@ def train(data_dir):
             totG += lossG.item()
 
             if i % 200 == 0:
-                utils.save_image((fake[:16] + 1) / 2, f'debug/ep{ep}_batch{i}_fake.png', nrow=4)
-                utils.save_image((x[:16] + 1)    / 2, f'debug/ep{ep}_batch{i}_real.png', nrow=4)
                 with torch.no_grad():
-                    z_rand = torch.randn(16, LATENT_DIM, device=DEVICE)
-                    y_rand = torch.randint(0, n_cls, (16,), device=DEVICE)
-                    oh_rand = F.one_hot(y_rand, n_cls).float().to(DEVICE)
-                    fake_rand = vae.generate(z_rand, oh_rand).clamp(-1, 1)
-                    utils.save_image((fake_rand + 1) / 2, f'debug/ep{ep}_batch{i}_rand.png', nrow=4)
-                with torch.no_grad():
-                    z1 = torch.randn(1, LATENT_DIM, device=DEVICE)
-                    z2 = torch.randn(1, LATENT_DIM, device=DEVICE)
-                    y_interp = torch.randint(0, n_cls, (1,), device=DEVICE)
-                    oh_interp = F.one_hot(y_interp, n_cls).float().to(DEVICE)
-                    imgs = []
-                    for alpha in torch.linspace(0, 1, steps=8):
-                        z = (1 - alpha) * z1 + alpha * z2
-                        img = vae.generate(z, oh_interp).clamp(-1, 1)
-                        imgs.append(img)
-                    imgs = torch.cat(imgs, 0)
-                    utils.save_image((imgs + 1) / 2, f'debug/ep{ep}_batch{i}_interp.png', nrow=8)
+                    for cls in range(n_cls):
+                        z_rand = torch.randn(1, LATENT_DIM, device=DEVICE)
+                        oh_rand = F.one_hot(torch.tensor([cls], device=DEVICE), n_cls).float()
+                        fake_rand = vae.generate(z_rand, oh_rand).clamp(-1, 1)
+                        utils.save_image((fake_rand + 1) / 2, f'debug/ep{ep}_cls{cls}_rand.png')
 
-        print(f'Época {ep} completa — Loss_G={(totG/len(dl)):.4f}  Loss_D={lossD.item():.4f}')
+        avg_loss_g = totG / max(1, len(dl))
+        print(f'Época {ep} completa — Loss_G={avg_loss_g:.4f}  Loss_D={lossD.item():.4f}')
+        torch.save({
+            "epoch": ep,
+            "vae": vae.state_dict(),
+            "d1": d1.state_dict(),
+            "d2": d2.state_dict(),
+            "optG": optG.state_dict(),
+            "optD": optD.state_dict(),
+            "best_loss_g": best_loss_g
+        }, checkpoint_path)
+        if avg_loss_g < best_loss_g:
+            best_loss_g = avg_loss_g
+            # salvo o melhor modelo com num_classes (para geração posterior)
+            torch.save({'model': vae.state_dict(), 'num_classes': n_cls}, best_model_path)
+            print(f"Novo melhor modelo salvo na época {ep} com Loss_G={best_loss_g:.4f}")
 
-    torch.save({'model': vae.state_dict(), 'num_classes': n_cls}, 'vae_wgp.pth')
     return n_cls
 
-# ----------- Geração de Amostras após o Treino ---------
-def gerar_amostras(peso_arquivo, pasta_saida, num_imgs=100):
-    categorias = [
-        "Broken soybeans",
-        "Immature soybeans",
-        "Intact soybeans",
-        "Skin-damaged soybeans",
-        "Spotted soybeans"
-    ]
-    
-    os.makedirs(pasta_saida, exist_ok=True)
+# ----------- Geração de Amostras após o Treino (1 categoria) -----------
+def gerar_amostras(peso_arquivo, pasta_saida, categoria, num_imgs=100, seed: int = 0):
+    torch.manual_seed(seed)
 
     checkpoint = torch.load(peso_arquivo, map_location=DEVICE)
-    n_cls = checkpoint['num_classes']
-    assert n_cls == len(categorias), f"Esperado {len(categorias)} classes, mas o modelo tem {n_cls}."
+    n_cls = checkpoint.get('num_classes', None)
+
+    if n_cls is None:
+        raise ValueError("Arquivo de peso não contém 'num_classes'.")
+
+    # como o treino foi feito apenas para uma categoria, n_cls deve ser 1
+    if n_cls != 1:
+        raise ValueError(f"Modelo deveria ter 1 classe, mas possui {n_cls} classes.")
 
     vae = VAE(LATENT_DIM, n_cls).to(DEVICE)
     vae.load_state_dict(checkpoint['model'])
     vae.eval()
 
+    # pasta principal da categoria
+    pasta_classe = os.path.join(pasta_saida, categoria.replace(" ", "_"))
+    os.makedirs(pasta_classe, exist_ok=True)
+
     with torch.no_grad():
-        for i in range(num_imgs):
+        for idx in range(num_imgs):
             z = torch.randn(1, LATENT_DIM, device=DEVICE)
-            y = torch.randint(0, n_cls, (1,), device=DEVICE)
-            oh = F.one_hot(y, n_cls).float().to(DEVICE)
-
+            oh = F.one_hot(torch.tensor([0], device=DEVICE), n_cls).float().to(DEVICE)  # apenas classe 0
             fake = vae.generate(z, oh).clamp(-1, 1)
-
-            classe_nome = categorias[y.item()]
-            pasta_classe = os.path.join(pasta_saida, classe_nome)
-            os.makedirs(pasta_classe, exist_ok=True)
-
-            caminho_arquivo = os.path.join(pasta_classe, f'amostra_{i:03d}.png')
+            caminho_arquivo = os.path.join(pasta_classe, f'amostra_{idx:04d}_{categoria.replace(" ", "_")}.png')
             utils.save_image((fake + 1) / 2, caminho_arquivo)
 
-# ----------------------- Main -------------------------
+
 if __name__ == "__main__":
-    data_dir     = r'C:\Users\faculdade\.cache\kagglehub\datasets\warcoder\soyabean-seeds\versions\2\Soybean Seeds'
-    train(data_dir)
-    gerar_amostras('vae_wgp.pth', 'amostras', num_imgs=100)
+    base_dir = r"C:\Users\faculdade\.cache\kagglehub\datasets\warcoder\soyabean-seeds\versions\2\Soybean Seeds"
+
+    for categoria in categorias:
+        print(f"\n--- Treinando categoria isolada: {categoria} ---")
+
+        data_dir = os.path.join(base_dir, categoria)
+
+        checkpoint = f"checkpoint_{categoria.replace(' ', '_')}.pth"
+        best_model = f"best_model_vae_{categoria.replace(' ', '_')}.pth"
+        pasta_amostras = os.path.join("amostras", categoria.replace(" ", "_"))
+
+        # treino do zero para a categoria atual (single_class=True)
+        train(
+            data_dir=data_dir,
+            checkpoint_path=checkpoint,
+            best_model_path=best_model,
+            seed=42,
+            resume=True,
+            single_class=True
+        )
+
+        # geração de amostras apenas dessa categoria
+        gerar_amostras(
+            peso_arquivo=best_model,
+            pasta_saida="amostras",
+            categoria=categoria,
+            num_imgs=1000,
+            seed=42
+        )
