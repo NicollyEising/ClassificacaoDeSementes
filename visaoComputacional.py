@@ -1,11 +1,11 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*- 
 """
 visaocomputacional.py — Pipeline de detecção + classificação de sementes (atualizado)
 
 Novidades:
 - Lista explícita das 5 classes conhecidas (em ordem coerente com treino).
 - Pós-processamento expandido: evita que 'Intact soybeans' ou 'Immature soybeans'
-  sejam confundidas como 'Skin-damaged' ou 'Broken' quando a evidência for fraca.
+  sejam confundidas como 'Skin-damaged', 'Broken' ou 'Spotted' quando a evidência for fraca.
 """
 
 import os
@@ -40,7 +40,99 @@ class_names = [
 model = model.to(device).eval()
 
 # ---------- parâmetros principais ----------
-IMAGE_PATH = r"C:\Users\faculdade\Desktop\SementesVisaoComputacional\amostras1\amostra_020.png"
+# ---------- funções ----------
+def infer_tta(pil_img: Image.Image) -> np.ndarray:
+    imgs = [
+        pil_img,
+        pil_img.transpose(Image.FLIP_LEFT_RIGHT),
+        pil_img.transpose(Image.FLIP_TOP_BOTTOM),
+        pil_img.transpose(Image.FLIP_LEFT_RIGHT).transpose(Image.FLIP_TOP_BOTTOM),
+    ]
+    probs_sum = None
+    with torch.no_grad():
+        for im in imgs:
+            t = transform_val(im).unsqueeze(0).to(device)
+            out = model(t)
+            p = torch.softmax(out, dim=1).cpu().numpy().ravel()
+            probs_sum = p if probs_sum is None else probs_sum + p
+    return probs_sum / len(imgs)
+
+def infer_whole(frame_bgr: np.ndarray) -> np.ndarray:
+    pil = Image.fromarray(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)).resize((IMG_SIZE, IMG_SIZE))
+    return infer_tta(pil)
+
+def topk_info(probs: np.ndarray, k: int = 3):
+    idxs = np.argsort(probs)[::-1][:k]
+    return [(class_names[int(i)], float(probs[int(i)])) for i in idxs]
+
+# ---------- menu ----------
+print("Selecione a fonte de entrada:")
+print("1 - Inserir imagem")
+print("2 - Usar câmera em tempo real")
+choice = input("Digite 1 ou 2: ").strip()
+
+OUT_DIR = Path("debug_rois")
+OUT_DIR.mkdir(exist_ok=True)
+
+if choice == "1":
+    IMAGE_PATH = input("Digite o caminho da imagem: ").strip()
+    if not os.path.exists(IMAGE_PATH):
+        raise FileNotFoundError(f"Imagem não encontrada: {IMAGE_PATH}")
+    frame = cv2.imread(IMAGE_PATH)
+    if frame is None:
+        raise RuntimeError(f"Falha ao carregar imagem: {IMAGE_PATH}")
+
+    probs = infer_whole(frame)
+    idx = int(np.argmax(probs))
+    name = class_names[idx]
+    prob = float(probs[idx])
+
+    cv2.putText(frame, f"{name} ({prob:.3f})", (20, 40),
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 200, 0), 2, cv2.LINE_AA)
+    cv2.imshow("Resultado", frame)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+    # salva em debug_rois
+    save_path = OUT_DIR / "annotated_result.png"
+    cv2.imwrite(str(save_path), frame)
+    print("[INFO] Resultado salvo em:", save_path)
+
+elif choice == "2":
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        raise RuntimeError("Não foi possível acessar a câmera.")
+    print("Pressione 'q' para encerrar e salvar a imagem final.")
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            continue
+
+        # inferência em tempo real
+        probs = infer_whole(frame)
+        idx = int(np.argmax(probs))
+        name = class_names[idx]
+        prob = float(probs[idx])
+
+        # anotação em tempo real
+        cv2.putText(frame, f"{name} ({prob:.2f})", (20, 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 200, 0), 2, cv2.LINE_AA)
+
+        cv2.imshow("Classificação em tempo real", frame)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            # salva a última frame com anotação
+            save_path = OUT_DIR / "annotated_result.png"
+            cv2.imwrite(str(save_path), frame)
+            print("[INFO] Resultado final salvo em:", save_path)
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+else:
+    raise ValueError("Opção inválida. Escolha 1 ou 2.")
 
 OUT_DIR = Path("debug_rois")
 OUT_DIR.mkdir(exist_ok=True)
@@ -60,8 +152,9 @@ MIN_KEEPED_ROIS = 1
 WHOLE_WEIGHT = 0.6
 
 # Ajuste de nomes completos
-BROKEN_NAME = "Broken soybeans"
-SKIN_NAME = "Skin-damaged soybeans"
+BROKEN_NAME  = "Broken soybeans"
+SKIN_NAME    = "Skin-damaged soybeans"
+SPOTTED_NAME = "Spotted soybeans"
 
 BROKEN_SKIN_MARGIN = 0.08
 SMALL_ROI_RATIO = 0.01
@@ -107,8 +200,9 @@ def class_index(name: str) -> int:
     except ValueError:
         return -1
 
-BROKEN_IDX = class_index(BROKEN_NAME)
-SKIN_IDX = class_index(SKIN_NAME)
+BROKEN_IDX  = class_index(BROKEN_NAME)
+SKIN_IDX    = class_index(SKIN_NAME)
+SPOTTED_IDX = class_index(SPOTTED_NAME)
 
 # ---------- leitura da imagem ----------
 frame = cv2.imread(IMAGE_PATH)
@@ -255,30 +349,31 @@ if BROKEN_IDX >= 0 and SKIN_IDX >= 0:
             final_prob = float(final_probs[final_idx])
 
 # ---------- pós-processamento: Classes saudáveis vs. danificadas ----------
-INTACT_IDX = class_index("Intact soybeans")
+INTACT_IDX   = class_index("Intact soybeans")
 IMMATURE_IDX = class_index("Immature soybeans")
 
-if INTACT_IDX >= 0 and IMMATURE_IDX >= 0:
-    p_intact = float(final_probs[INTACT_IDX])
+if INTACT_IDX >= 0 and IMMATURE_IDX >= 0 and SPOTTED_IDX >= 0:
+    p_intact   = float(final_probs[INTACT_IDX])
     p_immature = float(final_probs[IMMATURE_IDX])
-    p_skin = float(final_probs[SKIN_IDX]) if SKIN_IDX >= 0 else 0.0
-    p_broken = float(final_probs[BROKEN_IDX]) if BROKEN_IDX >= 0 else 0.0
+    p_skin     = float(final_probs[SKIN_IDX]) if SKIN_IDX >= 0 else 0.0
+    p_broken   = float(final_probs[BROKEN_IDX]) if BROKEN_IDX >= 0 else 0.0
+    p_spotted  = float(final_probs[SPOTTED_IDX])
 
-    if final_idx in (SKIN_IDX, BROKEN_IDX) and len(rois) > 0:
+    if final_idx in (SKIN_IDX, BROKEN_IDX, SPOTTED_IDX) and len(rois) > 0:
         r_best = max(rois, key=lambda r: r["peak"])
         roi_ratio = r_best["area"] / float(IMG_AREA)
         if roi_ratio < 0.02:
-            if whole_probs[INTACT_IDX] > max(whole_probs[SKIN_IDX], whole_probs[BROKEN_IDX]):
+            if whole_probs[INTACT_IDX] > max(whole_probs[SKIN_IDX], whole_probs[BROKEN_IDX], whole_probs[SPOTTED_IDX]):
                 final_idx = INTACT_IDX
                 final_name = class_names[final_idx]
                 final_prob = float(final_probs[final_idx])
-            elif whole_probs[IMMATURE_IDX] > max(whole_probs[SKIN_IDX], whole_probs[BROKEN_IDX]):
+            elif whole_probs[IMMATURE_IDX] > max(whole_probs[SKIN_IDX], whole_probs[BROKEN_IDX], whole_probs[SPOTTED_IDX]):
                 final_idx = IMMATURE_IDX
                 final_name = class_names[final_idx]
                 final_prob = float(final_probs[final_idx])
 
     healthy_max = max(p_intact, p_immature)
-    damage_max = max(p_skin, p_broken)
+    damage_max  = max(p_skin, p_broken, p_spotted)
     if healthy_max >= damage_max * 0.98:
         if p_intact >= p_immature:
             final_idx = INTACT_IDX
