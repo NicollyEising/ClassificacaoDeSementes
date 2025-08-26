@@ -16,6 +16,8 @@ import numpy as np
 from pathlib import Path
 from PIL import Image
 from collections import Counter
+import torch.nn.functional as F
+
 
 # ---------- carga do modelo ----------
 try:
@@ -39,8 +41,63 @@ class_names = [
 
 model = model.to(device).eval()
 
-# ---------- parâmetros principais ----------
-# ---------- funções ----------
+# ---------- Grad-CAM ----------
+class GradCAM:
+    def __init__(self, model, target_layer):
+        self.model = model
+        self.target_layer = target_layer
+        self.gradients = None
+        self.activations = None
+        self.hook_handles = []
+        self._register_hooks()
+
+    def _register_hooks(self):
+        def forward_hook(module, input, output):
+            self.activations = output.detach()
+
+        def backward_hook(module, grad_in, grad_out):
+            self.gradients = grad_out[0].detach()
+
+        self.hook_handles.append(
+            self.target_layer.register_forward_hook(forward_hook)
+        )
+        # usar hook atual da API PyTorch
+        self.hook_handles.append(
+            self.target_layer.register_full_backward_hook(backward_hook)
+        )
+
+    def remove_hooks(self):
+        for h in self.hook_handles:
+            h.remove()
+
+    def __call__(self, x, class_idx=None):
+        x = x.to(device)
+        out = self.model(x)
+
+        if class_idx is None:
+            class_idx = out.argmax(dim=1).item()
+
+        loss = out[:, class_idx]
+        self.model.zero_grad()
+        loss.backward(retain_graph=True)
+
+        # pesos médios
+        weights = self.gradients.mean(dim=(2, 3), keepdim=True)
+        cam = (weights * self.activations).sum(dim=1, keepdim=True)
+        cam = F.relu(cam)
+
+        cam = F.interpolate(cam, size=(IMG_SIZE, IMG_SIZE), mode="bilinear", align_corners=False)
+        cam = cam.squeeze().cpu().numpy()
+        cam = (cam - cam.min()) / (cam.max() - cam.min() + 1e-8)
+        return cam
+
+def overlay_cam(img_bgr, cam, alpha=0.5):
+    heatmap = cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_JET)
+    heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+    result = cv2.addWeighted(img_bgr, 1 - alpha, heatmap, alpha, 0)
+    return result
+
+# ---------- funções inferência ----------
 def infer_tta(pil_img: Image.Image) -> np.ndarray:
     imgs = [
         pil_img,
@@ -74,6 +131,20 @@ choice = input("Digite 1 ou 2: ").strip()
 OUT_DIR = Path("debug_rois")
 OUT_DIR.mkdir(exist_ok=True)
 
+# ---------- escolha do target_layer ----------
+# Ajuste aqui conforme seu backbone!
+# Exemplo para ResNet:
+# target_layer = model.layer4[-1]
+# Se for EfficientNet/MobileNet, troque por model.features[-1]
+print("[INFO] Configurando camada alvo para Grad-CAM.")
+try:
+    target_layer = model.layer4[-1]  # <- ajuste conforme sua rede
+except Exception:
+    target_layer = list(model.children())[-2]  # fallback tentativa
+
+gradcam = GradCAM(model, target_layer)
+
+# ---------- modo 1: imagem ----------
 if choice == "1":
     IMAGE_PATH = input("Digite o caminho da imagem: ").strip()
     if not os.path.exists(IMAGE_PATH):
@@ -87,44 +158,57 @@ if choice == "1":
     name = class_names[idx]
     prob = float(probs[idx])
 
-    cv2.putText(frame, f"{name} ({prob:.3f})", (20, 40),
-                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 200, 0), 2, cv2.LINE_AA)
-    cv2.imshow("Resultado", frame)
+    # Grad-CAM
+    input_tensor = transform_val(
+        Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).resize((IMG_SIZE, IMG_SIZE))
+    ).unsqueeze(0).to(device)
+
+    cam = gradcam(input_tensor, class_idx=idx)
+    cam_overlay = overlay_cam(cv2.resize(frame, (IMG_SIZE, IMG_SIZE)), cam)
+
+    cv2.putText(cam_overlay, f"{name} ({prob:.3f})", (20, 40),
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+
+    cv2.imshow("Resultado + Grad-CAM", cam_overlay)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-    # salva em debug_rois
-    save_path = OUT_DIR / "annotated_result.png"
-    cv2.imwrite(str(save_path), frame)
-    print("[INFO] Resultado salvo em:", save_path)
+    save_path = OUT_DIR / "annotated_gradcam.png"
+    cv2.imwrite(str(save_path), cam_overlay)
+    print("[INFO] Resultado Grad-CAM salvo em:", save_path)
 
+# ---------- modo 2: camera ----------
 elif choice == "2":
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         raise RuntimeError("Não foi possível acessar a câmera.")
-    print("Pressione 'q' para encerrar e salvar a imagem final.")
+    print("Pressione 'q' para encerrar.")
 
     while True:
         ret, frame = cap.read()
         if not ret:
             continue
 
-        # inferência em tempo real
         probs = infer_whole(frame)
         idx = int(np.argmax(probs))
         name = class_names[idx]
         prob = float(probs[idx])
 
-        # anotação em tempo real
-        cv2.putText(frame, f"{name} ({prob:.2f})", (20, 40),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 200, 0), 2, cv2.LINE_AA)
+        input_tensor = transform_val(
+            Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).resize((IMG_SIZE, IMG_SIZE))
+        ).unsqueeze(0).to(device)
 
-        cv2.imshow("Classificação em tempo real", frame)
+        cam = gradcam(input_tensor, class_idx=idx)
+        cam_overlay = overlay_cam(cv2.resize(frame, (IMG_SIZE, IMG_SIZE)), cam)
+
+        cv2.putText(cam_overlay, f"{name} ({prob:.2f})", (20, 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+
+        cv2.imshow("Classificação + Grad-CAM", cam_overlay)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
-            # salva a última frame com anotação
-            save_path = OUT_DIR / "annotated_result.png"
-            cv2.imwrite(str(save_path), frame)
+            save_path = OUT_DIR / "last_gradcam.png"
+            cv2.imwrite(str(save_path), cam_overlay)
             print("[INFO] Resultado final salvo em:", save_path)
             break
 
