@@ -338,6 +338,6 @@ if __name__ == "__main__":
             peso_arquivo=best_model,
             pasta_saida="amostras",
             categoria=categoria,
-            num_imgs=1000,
+            num_imgs=3000,
             seed=42
         )

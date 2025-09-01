@@ -17,6 +17,58 @@ from pathlib import Path
 from PIL import Image
 from collections import Counter
 import torch.nn.functional as F
+import requests
+import re
+import base64
+
+
+#----------------- OpenWeatherMap API -----------------
+
+WEATHER_API_KEY = "fa1b810b93d5467994f30008251705"
+
+clima = ""
+temp = ""
+chance_chuva = ""
+cidade = ""
+semente_identificada = ""
+
+def get_weather(cidade="São Paulo", dias=3):
+    url = "https://api.weatherapi.com/v1/forecast.json"
+    try:
+        resposta = requests.get(url, params={
+            "key": WEATHER_API_KEY,
+            "q": cidade,
+            "days": dias,
+            "lang": "pt"
+        })
+        resposta.raise_for_status()  # levanta exceção se status != 200
+        dados = resposta.json()
+        return dados  # retorna JSON bruto da API
+    except requests.exceptions.RequestException as erro:
+        print("Erro ao consultar a WeatherAPI:", erro)
+        return {
+            "erro": "Erro ao buscar clima",
+            "detalhe": str(erro)
+        }
+    
+clima = get_weather("Jaragua do Sul", 1)
+
+if "erro" not in clima:
+    cidade = clima["location"]["name"]
+    temp = clima["current"]["temp_c"]
+    condicao = clima["current"]["condition"]["text"]
+    chance_chuva = clima["forecast"]["forecastday"][0]["day"]["daily_chance_of_rain"]
+
+    print(f"Cidade: {cidade}")
+    print(f"Temperatura atual: {temp}°C")
+    print(f"Condição: {condicao}")
+    print(f"Chance de chuva: {chance_chuva}%")
+else:
+    print("Erro:", clima["detalhe"])
+
+# -------------------Fim openwheather------------------------
+
+
 
 
 # ---------- carga do modelo ----------
@@ -413,6 +465,7 @@ else:
 final_probs = softmax_normalize(final_probs)
 final_idx = int(np.argmax(final_probs))
 final_name = class_names[final_idx]
+semente_identificada = final_name
 final_prob = float(final_probs[final_idx])
 
 # ---------- pós-processamento: Broken vs Skin-damaged ----------
@@ -529,3 +582,179 @@ with open(OUT_DIR / "summary_best.json", "w", encoding="utf-8") as f:
 pred_dist = Counter([r["pred_idx"] for r in rois])
 print("[INFO] Distribuição de predições por ROI:", {class_names[i]: c for i, c in pred_dist.items()})
 print("[DONE]")
+
+
+
+
+
+#-------------------- Agro API -----------------------------
+
+
+consumer_key = "fyfa_Jsspy6meIrgVpFEonTxeUIa"
+consumer_secret = "14CHcEvIvoThD37ObxwlzgKPrn0a"
+
+# --- Função para gerar Access Token ---
+def get_access_token(consumer_key, consumer_secret):
+    credentials = f"{consumer_key}:{consumer_secret}"
+    b64_credentials = base64.b64encode(credentials.encode()).decode()
+    token_url = "https://api.cnptia.embrapa.br/token"
+    data = {"grant_type": "client_credentials"}
+    headers = {"Authorization": f"Basic {b64_credentials}"}
+    
+    response = requests.post(token_url, data=data, headers=headers)
+    if response.status_code == 200:
+        return response.json()["access_token"]
+    else:
+        raise Exception(f"Erro ao obter token: {response.status_code} {response.text}")
+
+
+# --- Função para consultar RespondeAgro ---
+def consulta_respondeagro(access_token, query, from_record=0, size=10):
+    url = "https://api.cnptia.embrapa.br/respondeagro/v1/_search/template"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    payload = {
+        "id": "query_all",
+        "params": {
+            "query_string": query,
+            "from": from_record,
+            "size": size
+        }
+    }
+    
+    response = requests.post(url, headers=headers, json=payload)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        raise Exception(f"Erro RespondeAgro: {response.status_code} {response.text}")
+
+# --- Função para exibir resultados de forma amigável ---
+def exibir_resultados_amigavel(resultados):
+    hits = resultados.get("hits", {}).get("hits", [])
+    if not hits:
+        print("Nenhum resultado encontrado para sua pergunta.")
+        return
+    
+    for i, item in enumerate(hits, start=1):
+        source = item["_source"]
+        print(f"\nResultado {i}:")
+        print(f"Pergunta: {source.get('question')}")
+        # Remove tags HTML da resposta
+        resposta_texto = re.sub(r'<.*?>', '', source.get('answer', ''))
+        print(f"Resposta: {resposta_texto}\n")
+        print(f"Capítulo: {source.get('chapter')}")
+        print(f"Livro: {source.get('book')}")
+        print(f"Ano: {source.get('year')}")
+        print(f"PDF: {source.get('pdf')}")
+        print(f"EPUB: {source.get('epub')}")
+        print("-" * 50)
+
+# --- Função de recomendações (atualizada) ---
+def responde_agro(final_name: str, max_queries_per_term: int = 10):
+    """
+    Gera recomendações agronômicas a partir da classificação (final_name)
+    e consulta RespondeAgro por uma série de queries (da mais específica
+    para a mais genérica). Exibe resultados quando encontrados.
+    """
+    # Mapeamento principal (termo curto / keyword)
+    recomendacao_map = {
+        "Intact soybeans": "sementes de soja saudáveis",
+        "Immature soybeans": "sementes de soja imaturas",
+        "Broken soybeans": "soja quebrada",
+        "Skin-damaged soybeans": "soja com casca danificada",
+        "Spotted soybeans": "soja com manchas",
+    }
+
+    # Listas de consultas (sinônimos e frases curtas) para cada classe
+    query_variants = {
+        "Intact soybeans": [
+            "características fisicas de sementes de soja saudáveis",
+            "recomendações para sementes de soja saudáveis"
+        ],
+        "Immature soybeans": [
+            "características de sementes de soja imaturas",
+            "recomendações para sementes de soja imaturas"
+        ],
+        "Broken soybeans": [
+            "características de sementes de soja quebradas",
+            "recomendações para sementes de soja quebradas"
+        ],
+        "Skin-damaged soybeans": [
+            "características de sementes de soja com casca danificada",
+            "recomendações para sementes de soja casca danificada"
+        ],
+        "Spotted soybeans": [
+            "características de sementes de soja com manchas",
+            "recomendações para sementes de soja com manchas"
+        ]
+    }
+
+    # Fallbacks genéricos
+    generic_queries = [
+        "manejo sementes de soja",
+        "qualidade de sementes de soja",
+        "controle de doenças em sementes de soja",
+        "boas práticas sementes soja"
+    ]
+
+    # Seleciona a lista de queries a usar
+    base_term = recomendacao_map.get(final_name, "soja")
+    queries = query_variants.get(final_name, []) + [base_term] + generic_queries
+
+    print(f"[INFO] Consulta recomendação para: {final_name}")
+    try:
+        token = get_access_token(consumer_key, consumer_secret)
+    except Exception as e:
+        print("[ERRO] Falha ao obter token RespondeAgro:", e)
+        return
+
+    # Tenta cada query em sequência; se encontrar resultados, exibe e sai
+    any_result = False
+    tried = set()
+    for q in queries:
+        # evita repetir a mesma query
+        q_clean = q.strip().lower()
+        if q_clean in tried:
+            continue
+        tried.add(q_clean)
+
+        # limita número de tentativas se houver muitas variantes
+        if len(tried) > max_queries_per_term + 3:
+            # permite algumas variações extras, depois sai do loop principal
+            pass
+
+        print(f"[INFO] Tentando query: '{q}'")
+        try:
+            resultados = consulta_respondeagro(token, q, from_record=0, size=10)
+        except Exception as exc:
+            print(f"[ERRO] Consulta RespondeAgro falhou para '{q}':", exc)
+            continue
+
+        hits = resultados.get("hits", {}).get("hits", [])
+        if hits:
+            any_result = True
+            print(f"[INFO] Resultados encontrados para '{q}':")
+            exibir_resultados_amigavel(resultados)
+            # não tentar mais ao encontrar algo relevante
+            return
+
+    # Se chegou aqui, nenhuma query retornou hits; tenta uma pesquisa ampla paginada
+    print("[INFO] Nenhum resultado direto encontrado. Tentando pesquisa ampla (tamanho maior).")
+    try:
+        resultados_amplos = consulta_respondeagro(token, base_term, from_record=0, size=20)
+        hits_amplos = resultados_amplos.get("hits", {}).get("hits", [])
+        if hits_amplos:
+            print(f"[INFO] Resultados amplos encontrados para '{base_term}':")
+            exibir_resultados_amigavel(resultados_amplos)
+            return
+    except Exception as e:
+        print("[ERRO] Consulta ampla falhou:", e)
+
+    # Por fim, exibe mensagem objetiva com sugestões de próximas ações
+    print("[WARN] Nenhum resultado encontrado no RespondeAgro para as consultas geradas.")
+    print("[SUGESTÃO] Experimente consultar manualmente com um dos termos abaixo ou revisitar a formulação:")
+    for s in (query_variants.get(final_name, [])[:3] + generic_queries[:2]):
+        print("  -", s)
+    print("[INFO] A API pode não conter conteúdo indexado para termos muito específicos; usar termos mais gerais costuma retornar resultados.")
+    return
+
+# -------------------- Chamada da função --------------------

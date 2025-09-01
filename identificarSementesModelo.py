@@ -1,6 +1,6 @@
 # identificarSementesModelo.py
 # ------------------------------------------------------------
-#  Train & load – versão 2024-06-12
+#  Train & load – versão com checkpoints 2024-08-26
 # ------------------------------------------------------------
 import os, time, json, random
 from pathlib import Path
@@ -16,19 +16,21 @@ import seaborn as sns
 
 
 # ---------- paths ----------
-DATA_DIR   = r'C:\Users\faculdade\.cache\kagglehub\datasets\warcoder\soyabean-seeds\versions\2\Soybean Seeds'
-MODEL_PATH = 'best_model.pth'
-NAMES_JSON = 'class_names.json'
+DATA_DIR    = r'C:\Users\faculdade\Desktop\SementesVisaoComputacional\amostras'
+MODEL_PATH  = 'best_model.pth'
+NAMES_JSON  = 'class_names.json'
+CKPT_DIR    = Path("checkpoints")
+CKPT_DIR.mkdir(exist_ok=True)
 
 # ---------- hiperparâmetros ----------
 IMG_SIZE      = 224
 BATCH_SIZE    = 32
-EPOCHS        = 40
-LR_MAX        = 3e-4            # pico do One-Cycle
+EPOCHS        = 50
+LR_MAX        = 3e-4
 WEIGHT_DECAY  = 1e-4
-EARLY_STOP    = 8               # paciência em épocas
+EARLY_STOP    = 8
 SEED          = 42
-NUM_WORKERS   = 0               # >0 no Linux acelera
+NUM_WORKERS   = 0
 
 torch.manual_seed(SEED); random.seed(SEED)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -71,7 +73,6 @@ def build_datasets():
     ds_train = Subset(ds_full_train, idx_train)
     ds_val   = Subset(ds_full_val,   idx_val)
 
-    # ───── mostra distribuição ─────
     cnt_train = Counter([labels[i] for i in idx_train])
     cnt_val   = Counter([labels[i] for i in idx_val])
     print('\nDistribuição de classes (treino):')
@@ -81,7 +82,6 @@ def build_datasets():
     for i,n in enumerate(class_names):
         print(f'  {n:<18}: {cnt_val[i]}')
 
-    # ───── sampler balanceado ─────
     weights = torch.tensor([1.0/cnt_train[i] for i in labels], dtype=torch.double)
     sampler_weights = weights[idx_train]
     sampler = WeightedRandomSampler(sampler_weights,
@@ -103,11 +103,31 @@ def build_model(num_classes):
     return model.to(device)
 
 
-def train():
+def save_checkpoint(epoch, model, optimizer, scheduler, best_acc, patience):
+    ckpt_path = CKPT_DIR / f"epoch_{epoch}.pth"
+    torch.save({
+        'epoch': epoch,
+        'model_state': model.state_dict(),
+        'optimizer_state': optimizer.state_dict(),
+        'scheduler_state': scheduler.state_dict(),
+        'best_acc': best_acc,
+        'patience': patience
+    }, ckpt_path)
+    print(f'  * Checkpoint salvo em {ckpt_path}')
+
+
+def load_checkpoint(model, optimizer, scheduler, filename):
+    ckpt = torch.load(filename, map_location=device)
+    model.load_state_dict(ckpt['model_state'])
+    optimizer.load_state_dict(ckpt['optimizer_state'])
+    scheduler.load_state_dict(ckpt['scheduler_state'])
+    return ckpt['epoch'], ckpt['best_acc'], ckpt['patience'], model, optimizer, scheduler
+
+
+def train(resume_ckpt=None):
     train_ld, val_ld, class_names, num_classes = build_datasets()
     model = build_model(num_classes)
 
-    # pesos para a CrossEntropy (inverso da freq.)
     targets = [y for _,y in datasets.ImageFolder(DATA_DIR).imgs]
     freq = torch.bincount(torch.tensor(targets, dtype=torch.int64))
     ce_weights = (1.0 / freq.float()).to(device)
@@ -120,8 +140,16 @@ def train():
         optimizer, max_lr=LR_MAX, epochs=EPOCHS,
         steps_per_epoch=steps_per_epoch, pct_start=0.3)
 
-    best_acc, patience = 0, 0
-    for epoch in range(1, EPOCHS+1):
+    start_epoch, best_acc, patience = 1, 0, 0
+
+    # Se retomar checkpoint
+    if resume_ckpt:
+        print(f'> Retomando treino de {resume_ckpt}')
+        start_epoch, best_acc, patience, model, optimizer, scheduler = \
+            load_checkpoint(model, optimizer, scheduler, resume_ckpt)
+        start_epoch += 1
+
+    for epoch in range(start_epoch, EPOCHS+1):
         t0 = time.time()
         model.train(); running_loss = 0; correct = 0
 
@@ -137,7 +165,6 @@ def train():
         train_loss = running_loss/len(train_ld.dataset)
         train_acc  = correct     /len(train_ld.dataset)
 
-        # ---- validação ----
         model.eval(); val_loss, val_correct = 0,0
         with torch.no_grad():
             for xb,yb in val_ld:
@@ -153,18 +180,18 @@ def train():
               f'val_loss {val_loss:.3f} acc {val_acc:.2%}  '
               f'({time.time()-t0:.1f}s)')
 
-        # ---- early stop ----
         if val_acc > best_acc + 1e-4:
             best_acc = val_acc; patience = 0
             torch.save(model.state_dict(), MODEL_PATH)
-            print('  * modelo salvo')
+            print('  * Modelo salvo como melhor')
         else:
             patience += 1
             if patience >= EARLY_STOP:
                 print('Early-stopping acionado.')
                 break
 
-    # -------- relatório final --------
+        save_checkpoint(epoch, model, optimizer, scheduler, best_acc, patience)
+
     model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
     model.eval(); y_true,y_pred=[],[]
     with torch.no_grad():
@@ -180,7 +207,6 @@ def train():
     plt.title('Matriz de Confusão'); plt.xlabel('Predito'); plt.ylabel('Verdadeiro')
     plt.tight_layout(); plt.show()
 
-    # salva nomes
     with open(NAMES_JSON,'w',encoding='utf-8') as f:
         json.dump(class_names,f,ensure_ascii=False)
 
@@ -189,10 +215,6 @@ def train():
 
 # ═════════════════ interface externa ═════════════════
 def load_trained_model():
-    """
-    Retorna (model, transform_val, class_names, device, IMG_SIZE).
-    Treina se best_model.pth não existir.
-    """
     if not os.path.exists(MODEL_PATH):
         print('> best_model.pth ausente – iniciando treino...')
         model, transform, names = train()
@@ -211,4 +233,6 @@ def load_trained_model():
 
 # ═════════════════ execução direta ═════════════════
 if __name__ == '__main__':
+    # Exemplo: retomar de um checkpoint
+    # train(resume_ckpt="checkpoints/epoch_10.pth")
     train()
