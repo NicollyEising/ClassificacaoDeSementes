@@ -1,0 +1,54 @@
+{
+    "epochs": 21,
+    "best_val_acc": 0.9996666666666667,
+    "f1_weighted": 0.9993333383135717,
+    "iou": 0.9986194738754192,
+    "class_report": {
+        "Broken_soybeans": {
+            "precision": 1.0,
+            "recall": 0.9965635738831615,
+            "f1-score": 0.9982788296041308,
+            "support": 582.0
+        },
+        "Immature_soybeans": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1-score": 1.0,
+            "support": 594.0
+        },
+        "Intact_soybeans": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1-score": 1.0,
+            "support": 608.0
+        },
+        "Skin-damaged_soybeans": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1-score": 1.0,
+            "support": 641.0
+        },
+        "Spotted_soybeans": {
+            "precision": 0.9965337954939342,
+            "recall": 1.0,
+            "f1-score": 0.9982638888888888,
+            "support": 575.0
+        },
+        "accuracy": 0.9993333333333333,
+        "macro avg": {
+            "precision": 0.9993067590987869,
+            "recall": 0.9993127147766323,
+            "f1-score": 0.9993085436986039,
+            "support": 3000.0
+        },
+        "weighted avg": {
+            "precision": 0.9993356441363375,
+            "recall": 0.9993333333333333,
+            "f1-score": 0.9993333383135717,
+            "support": 3000.0
+        }
+    },
+    "train_samples": 12000,
+    "val_samples": 3000,
+    "timestamp": "2025-09-27 19:19:27"
+}

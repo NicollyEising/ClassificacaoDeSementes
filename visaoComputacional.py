@@ -20,7 +20,10 @@ import torch.nn.functional as F
 import requests
 import re
 import base64
+from bancoDeDados import Database
 
+# criar instância global (ajuste credenciais)
+db = Database(dbname="sementesdb", user="postgres", password="123")
 
 #----------------- OpenWeatherMap API -----------------
 
@@ -197,6 +200,7 @@ except Exception:
 gradcam = GradCAM(model, target_layer)
 
 # ---------- modo 1: imagem ----------
+# ---------- modo 1: imagem ----------
 if choice == "1":
     IMAGE_PATH = input("Digite o caminho da imagem: ").strip()
     if not os.path.exists(IMAGE_PATH):
@@ -210,24 +214,55 @@ if choice == "1":
     name = class_names[idx]
     prob = float(probs[idx])
 
-    # Grad-CAM
+    # Grad-CAM (gera mapa na dimensão IMG_SIZE)
     input_tensor = transform_val(
         Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).resize((IMG_SIZE, IMG_SIZE))
     ).unsqueeze(0).to(device)
 
-    cam = gradcam(input_tensor, class_idx=idx)
-    cam_overlay = overlay_cam(cv2.resize(frame, (IMG_SIZE, IMG_SIZE)), cam)
+    cam = gradcam(input_tensor, class_idx=idx)  # cam em [0,1], shape (IMG_SIZE, IMG_SIZE)
 
-    cv2.putText(cam_overlay, f"{name} ({prob:.3f})", (20, 40),
+    # visualização pequena (para exibição)
+    cam_overlay_small = overlay_cam(cv2.resize(frame, (IMG_SIZE, IMG_SIZE)), cam)
+    cv2.putText(cam_overlay_small, f"{name} ({prob:.3f})", (20, 40),
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
 
-    cv2.imshow("Resultado + Grad-CAM", cam_overlay)
+    cv2.imshow("Resultado + Grad-CAM", cam_overlay_small)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
+    # --- cria overlay em resolução full-res (para salvar no banco) ---
+    H, W = frame.shape[:2]
+    cam_full = cv2.resize(cam, (W, H), interpolation=cv2.INTER_LINEAR)  # normalizado 0..1
+    cam_overlay_full = overlay_cam(frame.copy(), cam_full)
+    cv2.putText(cam_overlay_full, f"{name} ({prob:.3f})", (20, 40),
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+
+    # opcional: salva local para depuração
     save_path = OUT_DIR / "annotated_gradcam.png"
-    cv2.imwrite(str(save_path), cam_overlay)
-    print("[INFO] Resultado Grad-CAM salvo em:", save_path)
+    cv2.imwrite(str(save_path), cam_overlay_full)
+    print("[INFO] Resultado Grad-CAM (full-res) salvo em:", save_path)
+
+    # codifica e insere a imagem Grad-CAM full-res no banco (PNG)
+    is_success, buffer = cv2.imencode(".png", cam_overlay_full)
+    if not is_success:
+        raise RuntimeError("Falha ao codificar a imagem Grad-CAM para bytes.")
+    img_bytes = buffer.tobytes()
+
+    db.inserir_resultado(
+        img_bytes=img_bytes,
+        classe_prevista=name,
+        probabilidade=prob,
+        cidade=cidade,
+        temperatura=temp,
+        condicao=condicao,
+        chance_chuva=chance_chuva,
+        nome_arquivo=IMAGE_PATH  # opcional: armazena o caminho original
+    )
+    db_inserted = True
+    input_frame = frame.copy()    # mantém frame full-res para o pipeline
+    print("[INFO] Resultado (Grad-CAM) salvo no banco de dados (modo imagem).")
+
+
 
 # ---------- modo 2: camera ----------
 elif choice == "2":
@@ -236,15 +271,25 @@ elif choice == "2":
         raise RuntimeError("Não foi possível acessar a câmera.")
     print("Pressione 'q' para encerrar.")
 
+    last_frame = None   # guarda o último frame full-res da câmera
+    last_name = None
+    last_prob = None
+
     while True:
         ret, frame = cap.read()
         if not ret:
             continue
 
+        # mantenha o frame full-resolution para processamento posterior
+        last_frame = frame.copy()
+
         probs = infer_whole(frame)
         idx = int(np.argmax(probs))
         name = class_names[idx]
         prob = float(probs[idx])
+
+        last_name = name
+        last_prob = prob
 
         input_tensor = transform_val(
             Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).resize((IMG_SIZE, IMG_SIZE))
@@ -259,13 +304,46 @@ elif choice == "2":
         cv2.imshow("Classificação + Grad-CAM", cam_overlay)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
-            save_path = OUT_DIR / "last_gradcam.png"
-            cv2.imwrite(str(save_path), cam_overlay)
-            print("[INFO] Resultado final salvo em:", save_path)
+            # visualização pequena (opcional)
+            save_path = OUT_DIR / "last_gradcam_small.png"
+            cv2.imwrite(str(save_path), cam_overlay)  # cam_overlay já é a versão pequena mostrada
+            # cria overlay full-res a partir do último frame capturado
+            Hf, Wf = last_frame.shape[:2]
+            cam_full = cv2.resize(cam, (Wf, Hf), interpolation=cv2.INTER_LINEAR)
+            cam_overlay_full = overlay_cam(last_frame.copy(), cam_full)
+            cv2.putText(cam_overlay_full, f"{name} ({prob:.2f})", (20, 40),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+
+            # opcional: salvar local para depuração
+            save_path_full = OUT_DIR / "last_gradcam_full.png"
+            cv2.imwrite(str(save_path_full), cam_overlay_full)
+
+            # codifica e salva a imagem Grad-CAM full-res no banco
+            is_success, buffer = cv2.imencode(".png", cam_overlay_full)
+            if not is_success:
+                raise RuntimeError("Falha ao codificar a imagem Grad-CAM para bytes.")
+            img_bytes = buffer.tobytes()
+
+            db.inserir_resultado(
+                img_bytes=img_bytes,
+                classe_prevista=name,
+                probabilidade=prob,
+                cidade=cidade,
+                temperatura=temp,
+                condicao=condicao,
+                chance_chuva=chance_chuva,
+                nome_arquivo=None
+            )
+            db_inserted = True
+            input_frame = last_frame.copy()
+
+            print("[INFO] Resultado final (Grad-CAM full-res) salvo no banco de dados.")
             break
+
 
     cap.release()
     cv2.destroyAllWindows()
+
 
 else:
     raise ValueError("Opção inválida. Escolha 1 ou 2.")
@@ -341,9 +419,16 @@ SKIN_IDX    = class_index(SKIN_NAME)
 SPOTTED_IDX = class_index(SPOTTED_NAME)
 
 # ---------- leitura da imagem ----------
-frame = cv2.imread(IMAGE_PATH)
-if frame is None:
-    raise FileNotFoundError(IMAGE_PATH)
+if choice == "1":
+    # modo arquivo: ler a imagem do caminho informado
+    frame = cv2.imread(IMAGE_PATH)
+    if frame is None:
+        raise FileNotFoundError(IMAGE_PATH)
+else:
+    # modo câmera: usar o frame capturado e guardado em input_frame
+    if 'input_frame' not in globals() or input_frame is None:
+        raise RuntimeError("Nenhuma imagem disponível: capture com a câmera (opção 2) antes de processar.")
+    frame = input_frame
 
 H, W = frame.shape[:2]
 IMG_AREA = H * W
@@ -374,25 +459,27 @@ for i, cnt in enumerate(contours):
     x, y, w, h = cv2.boundingRect(cnt)
     per = cv2.arcLength(cnt, True)
 
+    # inicializa ar e circ para garantir que existam sempre
+    ar = w / h if h > 0 else 0.0
+    circ = 4.0 * np.pi * (area / (per * per)) if per != 0 else 0.0
+
     if per == 0:
         counters["perimeter_zero"] += 1
         reason = "perimeter_zero"
     elif area < min_area or area > max_area:
         counters["area_filtered"] += 1
         reason = "area_filtered"
+    elif ar < ASPECT_MIN or ar > ASPECT_MAX:
+        counters["aspect_filtered"] += 1
+        reason = "aspect_filtered"
+    elif circ < CIRC_MIN:
+        counters["circularity_filtered"] += 1
+        reason = "circularity_filtered"
     else:
-        ar = w / h if h > 0 else 0
-        circ = 0.0 if per == 0 else 4.0 * np.pi * (area / (per * per))
-        if ar < ASPECT_MIN or ar > ASPECT_MAX:
-            counters["aspect_filtered"] += 1
-            reason = "aspect_filtered"
-        elif circ < CIRC_MIN:
-            counters["circularity_filtered"] += 1
-            reason = "circularity_filtered"
-        else:
-            reason = "kept"
-            counters["kept"] += 1
+        reason = "kept"
+        counters["kept"] += 1
 
+    # define margem para corte do ROI
     margin = max(2, int(0.04 * max(w, h)))
     x0 = max(0, x - margin)
     y0 = max(0, y - margin)
@@ -411,8 +498,8 @@ for i, cnt in enumerate(contours):
         "i": i,
         "bbox": (x0, y0, x1, y1),
         "area": area,
-        "aspect": ar if per != 0 else 0.0,
-        "circularity": circ if per != 0 else 0.0,
+        "aspect": ar,
+        "circularity": circ,
         "reason": reason,
         "probs": probs,
         "peak": peak,
@@ -562,7 +649,7 @@ print("[INFO] Resultado anotado salvo em:", save_path)
 
 # ---------- resumo ----------
 summary = {
-    "image": IMAGE_PATH,
+    "image_mode": choice,
     "classes": class_names,
     "final_class": final_name,
     "final_prob": final_prob,
@@ -585,6 +672,7 @@ print("[DONE]")
 
 
 
+db.inserir_resultado(img_bytes, name, final_prob, cidade, temp, condicao, chance_chuva)
 
 
 #-------------------- Agro API -----------------------------
@@ -758,3 +846,4 @@ def responde_agro(final_name: str, max_queries_per_term: int = 10):
     return
 
 # -------------------- Chamada da função --------------------
+

@@ -1,0 +1,17 @@
+# Cache do Python
+__pycache__/
+
+# Checkpoints e modelos grandes
+checkpoints/
+*.pth
+
+# Dados grandes
+data/
+
+# Arquivos temporários do sistema
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/

@@ -103,13 +103,37 @@ def recomenda_soja_por_cidade(semente_identificada, clima, temp, chance_chuva, c
     elif chance_chuva <= 30:
         recomendacoes.append("Baixa probabilidade de chuva: planejar irrigação suplementar nos primeiros 15 dias.")
 
-    # Condições atuais
+        # Condições atuais
     if clima and "erro" not in clima:
         condicao = clima["current"]["condition"]["text"]
         umidade_relativa = clima["current"].get("humidity", None)
+
         recomendacoes.append(f"Condição atual em {cidade}: {condicao}.")
-        if umidade_relativa:
-            recomendacoes.append(f"Umidade relativa do ar: {umidade_relativa}%. Monitorar para prevenir doenças foliares.")
+        
+        if umidade_relativa is not None:
+            recomendacoes.append(f"Umidade relativa do ar: {umidade_relativa}%.")
+            
+            # Regras de recomendação por faixa de umidade
+            if umidade_relativa < 40:
+                recomendacoes.append(
+                    "Níveis de umidade baixos. Pode ocorrer estresse hídrico; "
+                    "considerar irrigação suplementar e monitorar a transpiração das plantas."
+                )
+            elif 40 <= umidade_relativa <= 60:
+                recomendacoes.append(
+                    "Umidade em faixa adequada para o desenvolvimento inicial. "
+                    "Manter monitoramento para evitar variações bruscas."
+                )
+            elif 61 <= umidade_relativa <= 80:
+                recomendacoes.append(
+                    "Umidade relativamente alta. Condições favoráveis ao desenvolvimento da soja, "
+                    "mas é importante intensificar o monitoramento de pragas e doenças."
+                )
+            else:  # acima de 80%
+                recomendacoes.append(
+                    "Umidade excessivamente elevada. Risco elevado de doenças foliares como ferrugem asiática. "
+                    "Recomenda-se inspeção frequente e aplicação preventiva de fungicidas, se necessário."
+                )
 
     # Boas práticas
     recomendacoes.append("Realizar aração ou gradagem leve se solo estiver compactado.")
