@@ -4,6 +4,7 @@
   <title>Segment Centralizado</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/semantic-ui@2.4.2/dist/semantic.min.css">
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="login.js"></script>
   <style>
     body, html {
       height: 100%;
@@ -21,6 +22,38 @@
       max-width: 500px;
       padding: 2rem;
     }
+
+    
+.sidebar-column {
+  height: 100vh; /* altura total da tela */
+  min-height: 600px; /* altura mínima opcional */
+}
+
+/* Menu vertical com altura fixa */
+.ui.vertical.menu.full-height {
+  height: 100%; /* ocupa toda a coluna */
+  overflow-y: auto; /* rolagem se exceder altura */
+}
+
+/* Mantendo estrutura de colunas flexíveis */
+.ui.grid.equal-height {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.ui.grid.equal-height > .column {
+  display: flex;
+  flex-direction: column;
+}
+
+.ui.grid.equal-height > .column > .ui.segment {
+  flex: 1;
+}
+
+/* Opcional: manter perfil no fundo */
+.profile-bottom {
+  margin-top: auto;
+}
   </style>
 </head>
 <body>

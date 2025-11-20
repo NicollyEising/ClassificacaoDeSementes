@@ -107,6 +107,15 @@ html, body {
   max-width: 0 !important;
 }
 
+.todosD {
+  position: absolute;
+  bottom: -15px; /* distância do fundo do segment */
+  left: 10px;   /* opcional: distância da borda esquerda */
+  right: 10px;  /* opcional: para que ocupe a largura */
+  display: flex;
+  justify-content: flex-start; /* ou center, se desejar centralizado */
+}
+
 /* Oculta o conteúdo do menu visualmente */
 .sidebar-column.collapsed #menu {
   opacity: 0;
@@ -325,7 +334,7 @@ font-size: 1.4rem !important;
 }
 
 .qrcodetitulo{
-  font-size: 4rem !important;
+  font-size: 2.5rem !important;
   margin: 30px 0 20px 0;
 }
 
@@ -389,4 +398,35 @@ font-size: 1.4rem !important;
   #toggleMenu {
     margin-left: 0 !important;
   }
+}
+
+.sidebar-column {
+  height: 100vh; /* altura total da tela */
+  min-height: 600px; /* altura mínima opcional */
+}
+
+/* Menu vertical com altura fixa */
+.ui.vertical.menu.full-height {
+  height: 100%; /* ocupa toda a coluna */
+  overflow-y: auto; /* rolagem se exceder altura */
+}
+
+/* Mantendo estrutura de colunas flexíveis */
+.ui.grid.equal-height {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.ui.grid.equal-height > .column {
+  display: flex;
+  flex-direction: column;
+}
+
+.ui.grid.equal-height > .column > .ui.segment {
+  flex: 1;
+}
+
+/* Opcional: manter perfil no fundo */
+.profile-bottom {
+  margin-top: auto;
 }

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Envio de Arquivo — Layout</title>
+
+  <!-- Bibliotecas -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/semantic-ui@2.4.2/dist/semantic.min.css">
+  <script src="https://code.jquery.com/jquery-3.1.1.min.js"
+          integrity="sha256-hVVnYaiADRTO2PzUGmuLJr8BLUSjGIZsDYGmIJLv2b8="
+          crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/semantic-ui@2.4.2/dist/semantic.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/flowbite@3.1.2/dist/flowbite.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/flowbite@3.1.2/dist/flowbite.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+
+  <style>
+    .hidden {
+      display: none !important;
+    }
+
+    /* Sidebar fixo */
+    #sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 250px;
+      height: 100vh;
+      padding-top: 1rem;
+      transition: transform 0.3s ease;
+      z-index: 1000;
+    }
+
+    /* Ajuste da área principal */
+    .main-column {
+      margin-left: 260px;
+      padding: 2rem;
+      transition: margin-left 0.3s ease;
+    }
+
+    /* Botão fixo de abrir/fechar */
+    #sidebar-toggle {
+      position: fixed;
+      top: 20px;
+      left: 230px;
+      z-index: 1100;
+      transition: left 0.3s ease;
+      background: white;
+      border: 1px solid #ddd;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="ui grid">
+    <!-- Sidebar -->
+    <div class="four wide column sidebar-column" id="sidebar">
+      <div class="ui vertical menu full-height" id="menu">
+        <div class="menu-content">
+          <div class="item mt-5"></div>
+
+          <div class="item mt-5">
+            <div class="menu">
+              <a class="item" href="index.html" data-section="rails"><i class="chart line icon"></i>Dashboard</a>
+              <a class="item" href="index.html#Defeitos" data-section="Defeitos"><i class="times circle outline icon"></i>Lista de Classificações</a>
+              <a class="item" href="input.html" data-section="Recomendações"><i class="boxes icon"></i>Enviar Arquivo</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="item profile-bottom">
+          <div class="header">Support</div>
+          <div class="menu">
+            <a class="item horizontal" href="#perfil">
+              <img class="ui mini circular image" src="https://semantic-ui.com/images/avatar2/small/molly.png">
+              <div class="content profile-content">
+                <div class="ui sub header">Molly</div>
+                Coordinator
+              </div>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+      <!-- Botão fixo de alternância -->
+  <button id="sidebar-toggle" class="ui icon button">
+    <i class="chevron left icon"></i>
+  </button>
+
+
+    <!-- Conteúdo principal -->
+    <div class="twelve wide column main-column" id="main-content">
+
+      <div id="item-container" class="item" style="margin-top:1rem;">
+        <img id="item-imagem" 
+             src="" 
+             alt="Imagem do Item" 
+             class="ui circular centered image shadow-lg border-4 border-gray-200" 
+             style="object-fit: cover; width: 180px; height: 180px;">
+      </div>
+    </div>
+  </div>
+
+
+
+  <!-- Scripts -->
+  <script src="item.js"></script>
+  <script src="input.js"></script>
+
+  <script>
+    const sidebar = document.getElementById("sidebar");
+    const toggleBtn = document.getElementById("sidebar-toggle");
+    const mainContent = document.getElementById("main-content");
+    let sidebarAberto = true;
+
+    toggleBtn.addEventListener("click", () => {
+      if (sidebarAberto) {
+        sidebar.style.transform = "translateX(-100%)";
+        mainContent.style.marginLeft = "0";
+        toggleBtn.style.left = "20px";
+        toggleBtn.innerHTML = '<i class="chevron right icon"></i>';
+      } else {
+        sidebar.style.transform = "translateX(0)";
+        mainContent.style.marginLeft = "260px";
+        toggleBtn.style.left = "250px";
+        toggleBtn.innerHTML = '<i class="chevron left icon"></i>';
+      }
+      sidebarAberto = !sidebarAberto;
+    });
+  </script>
+</body>
+</html>

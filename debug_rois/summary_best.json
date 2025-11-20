@@ -1,0 +1,55 @@
+{
+  "image_mode": "1",
+  "classes": [
+    "Broken soybeans",
+    "Immature soybeans",
+    "Intact soybeans",
+    "Skin-damaged soybeans",
+    "Spotted soybeans"
+  ],
+  "final_class": "Broken soybeans",
+  "final_prob": 0.3775420452155658,
+  "top3_final": [
+    [
+      0,
+      "Broken soybeans",
+      0.3775420452155658
+    ],
+    [
+      4,
+      "Spotted soybeans",
+      0.16491075046645198
+    ],
+    [
+      1,
+      "Immature soybeans",
+      0.15296063070453222
+    ]
+  ],
+  "whole_top3": [
+    [
+      0,
+      "Broken soybeans",
+      0.9311282634735107
+    ],
+    [
+      4,
+      "Spotted soybeans",
+      0.057948626577854156
+    ],
+    [
+      1,
+      "Immature soybeans",
+      0.007980342954397202
+    ]
+  ],
+  "fusion_params": {
+    "ALPHA_AREA": 0.6,
+    "BETA_CONF": 1.0,
+    "WHOLE_WEIGHT": 0.6
+  },
+  "counters": {
+    "area_filtered": 1
+  },
+  "num_rois": 1
+}

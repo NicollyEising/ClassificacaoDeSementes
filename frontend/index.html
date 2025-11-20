@@ -13,6 +13,7 @@
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 
   <script src="script.js"></script>
+  <script src="index.js"></script>
   <link rel="stylesheet" href="style.css">
   <style>
     .ui.grid.equal-height {
@@ -28,6 +29,63 @@
     .ui.grid.equal-height > .column > .ui.segment {
       flex: 1;
     }
+
+        /* Sidebar fixo */
+        #sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 250px;
+      height: 100vh;
+      padding-top: 1rem;
+      transition: transform 0.3s ease;
+      z-index: 1000;
+    }
+
+    /* Ajuste da área principal */
+    .main-column {
+      margin-left: 260px;
+      padding: 2rem;
+      transition: margin-left 0.3s ease;
+    }
+
+    /* Botão fixo de abrir/fechar */
+    #sidebar-toggle {
+      position: fixed;
+      top: 20px;
+      left: 230px;
+      z-index: 1100;
+      transition: left 0.3s ease;
+      background: white;
+      border: 1px solid #ddd;
+    }
+
+    /* Quando a sidebar estiver oculta */
+    #sidebar.hidden {
+      transform: translateX(-100%);
+    }
+
+    #sidebar.hidden + #sidebar-toggle {
+      left: 20px;
+    }
+
+    #sidebar.hidden ~ .main-column {
+      margin-left: 60px;
+    }
+    
+    #Defeitos {
+  width: 100%;
+  max-width: 85%;
+  margin-top: 2rem;
+}
+
+#Defeitos .ui.grid {
+  width: 100%;
+}
+
+#Defeitos .ui.segment {
+  width: 100%;
+}
   </style>
 </head>
 <body>
@@ -36,24 +94,15 @@
   <div class="four wide column sidebar-column" id="sidebar">
     <div class="ui vertical menu full-height" id="menu">
       <div class="menu-content">
-        <div class="item">
-          <div class="header">Products</div>
-          <div class="menu">
-            <div class="item">
-              <div class="ui icon input">
-                <input type="text" placeholder="Search mail...">
-                <i class="search icon"></i>
-              </div>
-            </div>
-          </div>
+        <div class="item mt-5">
+
         </div>
 
-        <div class="item">
+        <div class="item mt-5">
           <div class="menu">
             <a class="item" data-section="rails"><i class="chart line icon"></i>Dashboard</a>
-            <a class="item" data-section="Defeitos"><i class="times circle outline icon"></i>Defeitos</a>
-            <a class="item" data-section="Recomendações"><i class="boxes icon"></i>Recomendações</a>
-            <a class="item" data-section="Exportar"><i class="upload icon"></i>Exportar Relatório</a>
+            <a class="item" href="index.html#Defeitos" data-section="Defeitos"><i class="times circle outline icon"></i>Lista de Classificações</a>
+            <a class="item" href="input.html" data-section="Recomendações"><i class="boxes icon"></i>Enviar Arquivo</a>
           </div>
         </div>
       </div>
@@ -73,10 +122,13 @@
     </div>
   </div>
 
+      <!-- Botão fixo de alternância -->
+      <button id="sidebar-toggle" class="ui icon button">
+        <i class="chevron left icon"></i>
+      </button>
+
+      <div class="main-column">
   <div class="twelve wide column">
-    <button class="ui icon button" id="toggleMenu" style="margin-bottom: 1em;">
-      <i class="bars icon"></i>
-    </button>
 
     <div id="rails" class="ui  content-section">
       <div class="ui grid equal-height">
@@ -87,25 +139,8 @@
                 <div class="text">
                   Filtrar por Gravidade <i class="angle down icon"></i>
                 </div>
-                <div class="menu">
-                  <div class="item">
-                    Jenny Hess
-                  </div>
-                  <div class="item">
-                    Elliot Fu
-                  </div>
-                  <div class="item">
-                    Stevie Feliciano
-                  </div>
-                  <div class="item">
-                    Christian
-                  </div>
-                  <div class="item">
-                    Matt
-                  </div>
-                  <div class="item">
-                    Justen Kitsune
-                  </div>
+                <div class="menu" id="filtroClasses">
+              
                 </div>
               </div>
             </span>
@@ -166,7 +201,7 @@
               </div>
             </div>
 
-            <a href="" class="todosD">Todos os defeitos <i class="arrow right icon"></i></a>
+            <a href="index.html#Defeitos" data-section="Defeitos" class="todosD">Todos os defeitos <i class="arrow right icon"></i></a>
 
           </div>
         </div>
@@ -179,37 +214,9 @@
                     <div class="w-full bg-white dark:bg-gray-800 p-2 md:p-3">
                       <div class="flex justify-between items-start mb-2">
                         <h5 class="font-bold text-gray-900 dark:text-white m-0 leading-none titulo2">Crescimento</h5>
-                    
-                        <div class="flex items-center m-0 leading-none">
-                          <button
-                            id="dropdownDefaultButton"
-                            data-dropdown-toggle="lastDaysdropdown"
-                            data-dropdown-placement="bottom"
-                            class="text-gray-500 dark:text-gray-400 hover:text-gray-900 text-center inline-flex items-center dark:hover:text-white text-sm"
-                            type="button">
-                            Last 7 days
-                            <svg class="w-2.5 ms-1.5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 10 6">
-                              <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m1 1 4 4 4-4"/>
-                            </svg>
-                          </button>
-                    
-                          <!-- Dropdown menu -->
-                          <div id="lastDaysdropdown" class="z-10 hidden bg-white divide-y divide-gray-100 rounded-lg shadow-sm w-44 dark:bg-gray-700">
-                            <ul class="py-2 text-sm text-gray-700 dark:text-gray-200" aria-labelledby="dropdownDefaultButton">
-                              <li><a href="#" class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">Yesterday</a></li>
-                              <li><a href="#" class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">Today</a></li>
-                              <li><a href="#" class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">Last 7 days</a></li>
-                              <li><a href="#" class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">Last 30 days</a></li>
-                              <li><a href="#" class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">Last 90 days</a></li>
-                            </ul>
-                          </div>
-                        </div>
                       </div>
-                    
                       <div id="area-chart"></div>
                     </div>
-                    
-
                 </div>
               </div>
             </div>
@@ -218,21 +225,20 @@
           <div class="ui three column grid">
             <div class="column">
               <div class="ui rounded segment titulo1">
-                <h4 style="font-weight: bold; font-size: 18px; margin-bottom: 10px; color: gray;">Top Mês</h4>
-                <h2 class="mes" style="font-size: 24px; font-weight: bold; margin-bottom: 10px;">Novembro</h2>
+                <h4 style="font-weight: bold; font-size: 18px; margin-bottom: 10px; color: gray;">Clima Predominante</h4>
+                <h2 class="mes" style="font-size: 24px; font-weight: bold; margin-bottom: 10px;"></h2>
                 <h5 class="ano" style="font-size: 18px; font-weight: bold;;">2025</h5>
               </div>
             </div>
             <div class="column">
               <div class="ui rounded segment titulo1">
-                <h4 style="font-weight: bold; font-size: 18px; margin-bottom: 10px; color: gray">Melhor Ano</h4>
-                <h2 class="mes" style="font-size: 24px; font-weight: bold; margin-bottom: 10px;">2025</h2>
+                <h4 style="font-weight: bold; font-size: 18px; margin-bottom: 45px; color: gray">Taxa de Crescimento</h4>
                 <h5 class="crescimento" style="font-size: 18px; font-weight: bold;;">80% de crescimento</h5>
               </div>
             </div>
             <div class="column">
               <div class="ui rounded segment titulo1">
-                <h4 style="font-weight: bold; font-size: 18px; margin-bottom: 10px; color: gray">Melhor Semente</h4>
+                <h4 style="font-weight: bold; font-size: 18px; margin-bottom: 10px; color: gray">Classe Predominante</h4>
                 <h2 class="mes" style="font-size: 24px; font-weight: bold; margin-bottom: 10px;"><img src="https://soystats.com/wp-content/uploads/single-soybean-1024x851.jpg" alt="" style="width: 50px; height: 50px; border-radius: 50%;"></h2>
                 <h5 class="crescimento" style="font-size: 18px; font-weight: bold;">Semente de trigo</h5>
               </div>
@@ -242,44 +248,42 @@
       </div>
 
       <div class="ui grid equal-height ">
-        <div class="nine wide column">
-          <div class="ui rounded segment flex flex-col md:flex-row gap-4">
-            <div class="center flex flex-col items-center">
-              <!-- Circular Progress -->
-              <div class="relative w-40 h-40 md:w-64 md:h-64 flex items-center justify-center">
-                <svg class="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="18" cy="18" r="16" fill="none" class="stroke-current text-gray-200 dark:text-neutral-700" stroke-width="4"></circle>
-                  <circle cx="18" cy="18" r="16" fill="none" class="stroke-current text-red-600 dark:text-blue-500" stroke-width="4" stroke-dasharray="100" stroke-dashoffset="65" stroke-linecap="round"></circle>
+        <div class="nine wide column p-5">
+          <div class="ui rounded segment flex flex-col md:flex-row gap-4 justify-between items-center p-5">
+            <div class="center flex flex-col items-center p-5">
+              <div class="relative w-40 h-40 flex items-center justify-center">
+                <svg class="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 36 36">
+                  <circle cx="18" cy="18" r="16" fill="none" class="stroke-current text-gray-200" stroke-width="4"></circle>
+                  <circle cx="18" cy="18" r="16" fill="none" class="stroke-current text-red-600" stroke-width="4" stroke-dasharray="100" stroke-dashoffset="65" stroke-linecap="round"></circle>
                 </svg>
-                <span class="text-center text-sm font-bold text-red-600 dark:text-red-500 z-10">35%</span>
+                <span class="text-center text-sm font-bold text-red-600 z-10">35%</span>
               </div>
               <h2>Defeitos</h2>
             </div>
           
-            <div class="center flex flex-col items-center">
-              <!-- Circular Progress -->
-              <div class="relative w-40 h-40 md:w-64 md:h-64 flex items-center justify-center">
-                <svg class="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="18" cy="18" r="16" fill="none" class="stroke-current text-gray-200 dark:text-neutral-700" stroke-width="4"></circle>
-                  <circle cx="18" cy="18" r="16" fill="none" class="stroke-current text-green-600 dark:text-blue-500" stroke-width="4" stroke-dasharray="100" stroke-dashoffset="65" stroke-linecap="round"></circle>
+            <div class="center flex flex-col items-center p-5">
+              <div class="relative w-40 h-40 flex items-center justify-center p-5">
+                <svg class="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 36 36">
+                  <circle cx="18" cy="18" r="16" fill="none" class="stroke-current text-gray-200" stroke-width="4"></circle>
+                  <circle cx="18" cy="18" r="16" fill="none" class="stroke-current text-green-600" stroke-width="4" stroke-dasharray="100" stroke-dashoffset="65" stroke-linecap="round"></circle>
                 </svg>
-                <span class="text-center text-sm font-bold text-green-600 dark:text-green-500 z-10">35%</span>
+                <span class="text-center text-sm font-bold text-green-600 z-10">35%</span>
               </div>
               <h2>Qualidades</h2>
             </div>
           
-            <div class="center flex flex-col items-center">
-              <!-- Circular Progress -->
-              <div class="relative w-40 h-40 md:w-64 md:h-64 flex items-center justify-center">
-                <svg class="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="18" cy="18" r="16" fill="none" class="stroke-current text-gray-200 dark:text-neutral-700" stroke-width="4"></circle>
-                  <circle cx="18" cy="18" r="16" fill="none" class="stroke-current text-blue-600 dark:text-blue-500" stroke-width="4" stroke-dasharray="100" stroke-dashoffset="65" stroke-linecap="round"></circle>
+            <div class="center flex flex-col items-center p-5">
+              <div class="relative w-40 h-40 flex items-center justify-center p-5">
+                <svg class="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 36 36">
+                  <circle cx="18" cy="18" r="16" fill="none" class="stroke-current text-gray-200" stroke-width="4"></circle>
+                  <circle cx="18" cy="18" r="16" fill="none" class="stroke-current text-blue-600" stroke-width="4" stroke-dasharray="100" stroke-dashoffset="65" stroke-linecap="round"></circle>
                 </svg>
-                <span class="text-center text-sm font-bold text-blue-600 dark:text-blue-500 z-10">35%</span>
+                <span class="text-center text-sm font-bold text-blue-600 z-10">35%</span>
               </div>
               <h2>Prob. Crescimento</h2>
             </div>
           </div>
+          
           
         </div>
         <div class="seven wide column">
@@ -309,95 +313,44 @@
 
     <div id="Defeitos" class="ui segment rounded content-section">
       <div class="center qrcodetitulo">
-        <h1>QRcode</h1>
+        <h6>Lista de Classificação</h6>
       </div>
       <div class="ui stackable grid items-center center" style="height: 100%; min-height: 400px; display: flex; justify-content: center; align-items: center; text-align: center;">
 
-        <!-- Coluna esquerda -->
-        <div class="six wide column flex flex-col items-center justify-center">
-          <img class="ui fluid image max-w-xs"
-          style="border-radius: 0;"
-          src="https://upload.wikimedia.org/wikipedia/commons/f/fa/Link_pra_pagina_principal_da_Wikipedia-PT_em_codigo_QR_b.svg">
-          <button type="button"
-            class="mt-4 text-white bg-green-700 hover:bg-green-800 focus:outline-none focus:ring-4
-                   focus:ring-green-300 font-medium rounded-full text-sm px-5 py-2.5
-                   text-center me-2 mb-2 dark:bg-green-600 dark:hover:bg-green-700 dark:focus:ring-green-800">
-            Download
+
+        <!--adicionar aqui as listas-->
+
           </button>
         </div>
     
-        <!-- Coluna direita -->
-        <div class="four wide column flex items-center justify-center">
-          <div class="w-full max-w-sm min-w-[200px] space-y-4">
-    
-            <!-- Campo de texto com label -->
-            <div>
-              <label for="inputDefeito" class="block mb-1 text-sm font-medium text-slate-700">
-                Enviar URL ou texto
-              </label>
-              <input
-                id="inputDefeito"
-                class="w-full bg-white placeholder:text-slate-400 text-slate-700 text-sm
-                       border border-slate-200 rounded-md px-3 py-2 transition duration-300
-                       ease focus:outline-none focus:border-slate-400 hover:border-slate-300
-                       shadow-sm focus:shadow"
-                placeholder="Digite aqui...">
-            </div>
-    
-            <!-- Botão dropdown com label -->
-            <div>
-              <label for="dropdownDefaultButton" class="block mb-1 text-sm font-medium text-slate-700">
-                Tamanho da imagem
-              </label>
-              <button id="dropdownDefaultButton"
-                data-dropdown-toggle="dropdown"
-                type="button"
-                class="w-full bg-white text-slate-700 text-sm
-                       border border-slate-200 rounded-md px-3 py-2
-                       text-left inline-flex items-center justify-between
-                       transition duration-300 ease
-                       focus:outline-none focus:border-slate-400 hover:border-slate-300
-                       shadow-sm focus:shadow">
-                Selecionar...
-                <svg class="w-2.5 h-2.5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 10 6">
-                  <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m1 1 4 4 4-4"/>
-                </svg>
-              </button>
 
-              <!-- Menu drop-down -->
-              <div id="dropdown"
-                class="z-10 hidden w-60 bg-white border border-slate-200 rounded-md shadow-sm">
-                <ul class="py-2 text-sm text-slate-700" aria-labelledby="dropdownDefaultButton">
-                  <li><a href="#" class="block px-3 py-2 hover:bg-slate-100">100x100</a></li>
-                  <li><a href="#" class="block px-3 py-2 hover:bg-slate-100">200x200</a></li>
-                  <li><a href="#" class="block px-3 py-2 hover:bg-slate-100">300x300</a></li>
-                  <li><a href="#" class="block px-3 py-2 hover:bg-slate-100">400x400</a></li>
-                </ul>
-              </div>
-              <button type="button"
-                class="mt-4 text-white bg-green-700 hover:bg-green-800 focus:outline-none focus:ring-4
-                       focus:ring-green-300 font-medium rounded-full text-sm px-5 py-2.5 text-center
-                       me-2 mb-2 dark:bg-green-600 dark:hover:bg-green-700 dark:focus:ring-green-800">
-                Gerar
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
-
-
-    </div>
-    <div id="Recomendações" class="ui segment content-section">
-      <h3>PHP</h3>
-      <p>Popular CMS platforms like WordPress, Joomla, and Drupal powered by PHP.</p>
-    </div>
-    <div id="Exportar" class="ui segment content-section">
-      <h3>Shared Hosting</h3>
-      <p>Affordable hosting plans for personal or small business websites.</p>
     </div>
   </div>
 </div>
+</div>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const sidebar = document.getElementById("sidebar");
+    const toggleButton = document.getElementById("sidebar-toggle");
+    const fileInput = document.getElementById("fileInput");
+    const fileNameInput = document.getElementById("file-name");
 
+    toggleButton.addEventListener("click", () => {
+      sidebar.classList.toggle("hidden");
+      const icon = toggleButton.querySelector("i");
+
+      // Alterna o ícone entre esquerda e direita
+      if (sidebar.classList.contains("hidden")) {
+        icon.classList.remove("chevron", "left");
+        icon.classList.add("chevron", "right");
+      } else {
+        icon.classList.remove("chevron", "right");
+        icon.classList.add("chevron", "left");
+      }
+    });
+  });
+</script>
 </body>
 </html>

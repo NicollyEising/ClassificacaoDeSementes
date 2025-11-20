@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Envio de Arquivo — Layout</title>
+
+  <!-- Bibliotecas externas -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/semantic-ui@2.4.2/dist/semantic.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="https://code.jquery.com/jquery-3.1.1.min.js"
+          integrity="sha256-hVVnYaiADRTO2PzUGmuLJr8BLUSjGIZsDYGmIJLv2b8="
+          crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/semantic-ui@2.4.2/dist/semantic.min.js"></script>
+
+  <!-- Estilos locais -->
+  <link rel="stylesheet" href="style.css">
+
+  <style>
+    .hidden {
+      display: none !important;
+    }
+
+    /* Sidebar fixo */
+    #sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 250px;
+      height: 100vh;
+      padding-top: 1rem;
+      transition: transform 0.3s ease;
+      z-index: 1000;
+    }
+
+    /* Ajuste da área principal */
+    .main-column {
+      margin-left: 260px;
+      padding: 2rem;
+      transition: margin-left 0.3s ease;
+    }
+
+    /* Botão fixo de abrir/fechar */
+    #sidebar-toggle {
+      position: fixed;
+      top: 20px;
+      left: 230px;
+      z-index: 1100;
+      transition: left 0.3s ease;
+      background: white;
+      border: 1px solid #ddd;
+    }
+
+    /* Quando a sidebar estiver oculta */
+    #sidebar.hidden {
+      transform: translateX(-100%);
+    }
+
+    #sidebar.hidden + #sidebar-toggle {
+      left: 20px;
+    }
+
+    #sidebar.hidden ~ .main-column {
+      margin-left: 60px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="ui grid">
+    <!-- Sidebar -->
+    <div class="four wide column sidebar-column" id="sidebar">
+      <div class="ui vertical menu full-height" id="menu">
+        <div class="menu-content">
+          <div class="item mt-5"></div>
+
+          <div class="item mt-5">
+            <div class="menu">
+              <a class="item" href="index.html" data-section="rails"><i class="chart line icon"></i>Dashboard</a>
+              <a class="item" href="index.html#Defeitos" data-section="Defeitos"><i class="times circle outline icon"></i>Lista de Classificações</a>
+              <a class="item" href="input.html" data-section="Recomendações"><i class="boxes icon"></i>Enviar Arquivo</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="item profile-bottom">
+          <div class="header">Support</div>
+          <div class="menu">
+            <a class="item horizontal" href="#perfil">
+              <img class="ui mini circular image" src="https://semantic-ui.com/images/avatar2/small/molly.png">
+              <div class="content profile-content">
+                <div class="ui sub header">Molly</div>
+                Coordinator
+              </div>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Botão fixo de alternância -->
+    <button id="sidebar-toggle" class="ui icon button">
+      <i class="chevron left icon"></i>
+    </button>
+
+    <!-- Conteúdo principal -->
+    <div class="twelve wide column main-column"  style="margin-top:2rem;">
+      <div class="ui segment rounded shadow-md p-6 bg-white">
+        <h3 class="ui header text-gray-700">
+          Envio de Arquivo <span aria-hidden="true" class="text-green-500">●</span>
+        </h3>
+
+        <form class="ui form" style="margin-top:1.5rem;">
+          <div class="field">
+            <label for="cidade" class="font-medium text-gray-600">Cidade</label>
+            <div class="ui left icon input w-full">
+              <i class="map marker alternate icon"></i>
+              <input type="text" id="cidade" placeholder="Digite a cidade" class="rounded-md focus:ring-2 focus:ring-green-500" />
+            </div>
+          </div>
+
+          <div class="field" style="margin-top:1rem;">
+            <label for="fileInput" class="font-medium text-gray-600">Selecione uma imagem</label>
+            <div class="ui action input w-full">
+              <input type="text" id="file-name" placeholder="Nenhum arquivo selecionado" readonly />
+              <label for="fileInput" class="ui button gray">Escolher arquivo</label>
+              <input type="file" id="fileInput" accept="image/*" class="hidden" />
+            </div>
+          </div>
+
+          <div class="field" style="margin-top:1.5rem;">
+            <button type="button" id="enviarBtn" class="ui green button fluid">
+              <i class="cloud upload icon"></i> Enviar Arquivo
+            </button>
+          </div>
+        </form>
+
+        <div id="resultado" class="mt-6 p-4 bg-gray-50 rounded-md border border-gray-200 hidden"></div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Script principal -->
+  <script src="input.js"></script>
+</body>
+</html>
