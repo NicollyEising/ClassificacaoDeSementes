@@ -2,6 +2,7 @@
 # ------------------------------------------------------------
 #  Train & load – versão completa com checkpoints, F1 e IoU
 # ------------------------------------------------------------
+from datetime import datetime
 import os, time, json, random
 from pathlib import Path
 from collections import Counter
@@ -13,6 +14,8 @@ from torchvision.models    import resnet18, ResNet18_Weights
 from sklearn.metrics       import classification_report, confusion_matrix, f1_score
 import matplotlib.pyplot as plt
 import seaborn as sns
+from bancoDeDados import Database
+from io import BytesIO
 
 # ---------- paths ----------
 DATA_DIR    = r'C:\Users\faculdade\Desktop\SementesVisaoComputacional\amostras'
@@ -219,7 +222,50 @@ def train(resume_ckpt=None):
         f.write(f"Treino: {results_doc['train_samples']}, Validação: {results_doc['val_samples']}\n")
 
 
-    return model, tf_val, class_names
+
+# ============================
+# SALVAR NO BANCO DE DADOS
+# ============================
+
+
+    # salvar no banco de dados
+    # criar conexão com o banco
+    db = Database(dbname="sementesdb", user="postgres", password="123")
+
+    # aqui você precisa do ID do usuário; exemplo:
+    usuario_id = 1  # substitua pelo ID correto do usuário que está executando o treino
+
+    # salvar na tabela resultados
+    salvar_resultado_treino(db, usuario_id, results_doc, nome_arquivo="training_results.json")
+
+    db.fechar()
+
+
+
+def salvar_resultado_treino(db: Database, usuario_id: int, results_doc: dict, nome_arquivo: str = None):
+    """
+    Salva os resultados do treino na tabela 'resultados' para um usuário específico.
+    """
+    import json
+
+    # converter relatório de classes para string JSON para salvar na coluna 'classe_prevista'
+    classe_prevista_json = json.dumps(results_doc['class_report'], ensure_ascii=False)
+
+    # salvar
+    db.inserir_resultado(
+        usuario_id=usuario_id,
+        img_bytes=None,  # não há imagem aqui, mas poderia salvar uma figura se quiser
+        classe_prevista=classe_prevista_json,
+        probabilidade=results_doc['best_val_acc'],  # pode usar best_val_acc como "probabilidade"
+        cidade=None,
+        temperatura=None,
+        condicao=None,
+        chance_chuva=None,
+        nome_arquivo=nome_arquivo,
+        data_hora=datetime.now(),
+    )
+    print(f"Resultado do treino salvo para usuario_id={usuario_id}")
+
 
 def load_trained_model():
     if not os.path.exists(MODEL_PATH):
@@ -236,4 +282,4 @@ def load_trained_model():
     return model, transform, names, device, IMG_SIZE
 
 if __name__ == '__main__':
-    train()  # ou train(resume_ckpt="checkpoints/epoch_10.pth")
+    train()

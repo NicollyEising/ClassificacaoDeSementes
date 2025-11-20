@@ -1,14 +1,5 @@
-# -*- coding: utf-8 -*- 
-"""
-visaocomputacional.py — Pipeline de detecção + classificação de sementes (atualizado)
-
-Novidades:
-- Lista explícita das 5 classes conhecidas (em ordem coerente com treino).
-- Pós-processamento expandido: evita que 'Intact soybeans' ou 'Immature soybeans'
-  sejam confundidas como 'Skin-damaged', 'Broken' ou 'Spotted' quando a evidência for fraca.
-"""
-
 import os
+import io
 import cv2
 import json
 import torch
@@ -20,20 +11,94 @@ import torch.nn.functional as F
 import requests
 import re
 import base64
-from bancoDeDados import Database
+from datetime import datetime
+from typing import Optional, List
+from fastapi import FastAPI, Form, UploadFile, File, HTTPException, Depends
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from pydantic import BaseModel
+import uvicorn
+from fastapi.middleware.cors import CORSMiddleware
+from bancoDeDados import *
 
-# criar instância global (ajuste credenciais)
+# Importações do script original (assumindo arquivos no mesmo diretório)
+from bancoDeDados import Database
+from cadastroLogin import login, usuario_logado  # Ajuste se necessário
+try:
+    from identificarSementesModelo import load_trained_model
+except Exception as e:
+    raise RuntimeError("Não foi possível importar load_trained_model") from e
+
+
+
+# Instância global do BD (ajuste credenciais)
 db = Database(dbname="sementesdb", user="postgres", password="123")
 
-#----------------- OpenWeatherMap API -----------------
+# Configurações globais do modelo
+model, transform_val, class_names, device, IMG_SIZE = load_trained_model()
+class_names = [
+    "Broken soybeans",
+    "Immature soybeans",
+    "Intact soybeans",
+    "Skin-damaged soybeans",
+    "Spotted soybeans"
+]
+model = model.to(device).eval()
 
+# Configurações de API
+app = FastAPI(title="API Visão Computacional Sementes")
+security = HTTPBasic()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"] ,  # endereço do seu frontend
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Chaves API (do script original)
 WEATHER_API_KEY = "fa1b810b93d5467994f30008251705"
+AGRO_CONSUMER_KEY = "fyfa_Jsspy6meIrgVpFEonTxeUIa"
+AGRO_CONSUMER_SECRET = "14CHcEvIvoThD37ObxwlzgKPrn0a"
 
-clima = ""
-temp = ""
-chance_chuva = ""
-cidade = ""
-semente_identificada = ""
+# Diretórios e constantes (do script)
+OUT_DIR = Path("debug_rois")
+OUT_DIR.mkdir(exist_ok=True)
+MIN_AREA_RATIO = 0.00015
+MAX_AREA_RATIO = 0.12
+ASPECT_MIN, ASPECT_MAX = 0.25, 4.0
+CIRC_MIN = 0.10
+USE_TTA = True
+CONFIDENCE_PRINT_TOPK = 3
+ALPHA_AREA = 0.6
+BETA_CONF = 1.0
+MIN_KEEPED_ROIS = 1
+WHOLE_WEIGHT = 0.6
+BROKEN_SKIN_MARGIN = 0.08
+SMALL_ROI_RATIO = 0.01
+BROKEN_NAME = "Broken soybeans"
+SKIN_NAME = "Skin-damaged soybeans"
+SPOTTED_NAME = "Spotted soybeans"
+
+# Modelos Pydantic para respostas
+class ClimaResponse(BaseModel):
+    cidade: str
+    temperatura: float
+    condicao: str
+    chance_chuva: int
+
+class ResultadoProcessamento(BaseModel):
+    classe_prevista: str
+    probabilidade: float
+    imagem_anotada_base64: str  # Imagem anotada em base64
+    clima: ClimaResponse
+    recomendacoes: List[dict]  # Resultados da API Agro
+
+class LoginResponse(BaseModel):
+    usuario_id: int
+    mensagem: str
+
+# Funções auxiliares (do script original, adaptadas)
 
 def get_weather(cidade="São Paulo", dias=3):
     url = "https://api.weatherapi.com/v1/forecast.json"
@@ -44,59 +109,44 @@ def get_weather(cidade="São Paulo", dias=3):
             "days": dias,
             "lang": "pt"
         })
-        resposta.raise_for_status()  # levanta exceção se status != 200
+        resposta.raise_for_status()
         dados = resposta.json()
-        return dados  # retorna JSON bruto da API
+        return dados
     except requests.exceptions.RequestException as erro:
-        print("Erro ao consultar a WeatherAPI:", erro)
-        return {
-            "erro": "Erro ao buscar clima",
-            "detalhe": str(erro)
-        }
+        raise HTTPException(status_code=500, detail=f"Erro ao consultar clima: {erro}")
+
+def get_access_token(consumer_key, consumer_secret):
+    credentials = f"{consumer_key}:{consumer_secret}"
+    b64_credentials = base64.b64encode(credentials.encode()).decode()
+    token_url = "https://api.cnptia.embrapa.br/token"
+    data = {"grant_type": "client_credentials"}
+    headers = {"Authorization": f"Basic {b64_credentials}"}
     
-clima = get_weather("Jaragua do Sul", 1)
+    response = requests.post(token_url, data=data, headers=headers)
+    if response.status_code == 200:
+        return response.json()["access_token"]
+    else:
+        raise HTTPException(status_code=500, detail=f"Erro ao obter token Agro: {response.text}")
 
-if "erro" not in clima:
-    cidade = clima["location"]["name"]
-    temp = clima["current"]["temp_c"]
-    condicao = clima["current"]["condition"]["text"]
-    chance_chuva = clima["forecast"]["forecastday"][0]["day"]["daily_chance_of_rain"]
+def consulta_respondeagro(access_token, query, from_record=0, size=10):
+    url = "https://api.cnptia.embrapa.br/respondeagro/v1/_search/template"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    payload = {
+        "id": "query_all",
+        "params": {
+            "query_string": query,
+            "from": from_record,
+            "size": size
+        }
+    }
+    
+    response = requests.post(url, headers=headers, json=payload)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        raise HTTPException(status_code=500, detail=f"Erro na consulta Agro: {response.text}")
 
-    print(f"Cidade: {cidade}")
-    print(f"Temperatura atual: {temp}°C")
-    print(f"Condição: {condicao}")
-    print(f"Chance de chuva: {chance_chuva}%")
-else:
-    print("Erro:", clima["detalhe"])
-
-# -------------------Fim openwheather------------------------
-
-
-
-
-# ---------- carga do modelo ----------
-try:
-    from identificarSementesModelo import load_trained_model
-except Exception as e:
-    raise RuntimeError(
-        "Não foi possível importar load_trained_model de identificarSementesModelo.py"
-    ) from e
-
-# Carrega modelo, etc.
-model, transform_val, class_names, device, IMG_SIZE = load_trained_model()
-
-# Lista explícita de classes conforme treino
-class_names = [
-    "Broken soybeans",
-    "Immature soybeans",
-    "Intact soybeans",
-    "Skin-damaged soybeans",
-    "Spotted soybeans"
-]
-
-model = model.to(device).eval()
-
-# ---------- Grad-CAM ----------
+# Classe GradCAM (do script)
 class GradCAM:
     def __init__(self, model, target_layer):
         self.model = model
@@ -113,13 +163,8 @@ class GradCAM:
         def backward_hook(module, grad_in, grad_out):
             self.gradients = grad_out[0].detach()
 
-        self.hook_handles.append(
-            self.target_layer.register_forward_hook(forward_hook)
-        )
-        # usar hook atual da API PyTorch
-        self.hook_handles.append(
-            self.target_layer.register_full_backward_hook(backward_hook)
-        )
+        self.hook_handles.append(self.target_layer.register_forward_hook(forward_hook))
+        self.hook_handles.append(self.target_layer.register_full_backward_hook(backward_hook))
 
     def remove_hooks(self):
         for h in self.hook_handles:
@@ -136,244 +181,31 @@ class GradCAM:
         self.model.zero_grad()
         loss.backward(retain_graph=True)
 
-        # pesos médios
         weights = self.gradients.mean(dim=(2, 3), keepdim=True)
         cam = (weights * self.activations).sum(dim=1, keepdim=True)
         cam = F.relu(cam)
-
         cam = F.interpolate(cam, size=(IMG_SIZE, IMG_SIZE), mode="bilinear", align_corners=False)
         cam = cam.squeeze().cpu().numpy()
         cam = (cam - cam.min()) / (cam.max() - cam.min() + 1e-8)
         return cam
 
-def overlay_cam(img_bgr, cam, alpha=0.5):
-    heatmap = cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_JET)
-    heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
-    result = cv2.addWeighted(img_bgr, 1 - alpha, heatmap, alpha, 0)
+def overlay_cam(img_bgr: np.ndarray, cam: np.ndarray, alpha: float = 0.5) -> np.ndarray:
+    """
+    img_bgr: imagem no formato BGR (como retornado pelo OpenCV)
+    cam: mapa de ativação normalizado em [0,1], shape=(H_cam, W_cam)
+    Retorna: imagem BGR com heatmap sobreposta
+    """
+    # Garantir tipo e escala corretos para applyColorMap
+    heatmap_uint8 = np.uint8(255 * np.clip(cam, 0.0, 1.0))
+    heatmap_bgr = cv2.applyColorMap(heatmap_uint8, cv2.COLORMAP_JET)  # já retorna BGR
+    # Ajustar tamanho do heatmap para o da imagem, se necessário
+    if (heatmap_bgr.shape[0] != img_bgr.shape[0]) or (heatmap_bgr.shape[1] != img_bgr.shape[1]):
+        heatmap_bgr = cv2.resize(heatmap_bgr, (img_bgr.shape[1], img_bgr.shape[0]), interpolation=cv2.INTER_LINEAR)
+    # Combinar heatmap e imagem original (ambos em BGR)
+    result = cv2.addWeighted(img_bgr, 1.0 - alpha, heatmap_bgr, alpha, 0)
     return result
 
-# ---------- funções inferência ----------
-def infer_tta(pil_img: Image.Image) -> np.ndarray:
-    imgs = [
-        pil_img,
-        pil_img.transpose(Image.FLIP_LEFT_RIGHT),
-        pil_img.transpose(Image.FLIP_TOP_BOTTOM),
-        pil_img.transpose(Image.FLIP_LEFT_RIGHT).transpose(Image.FLIP_TOP_BOTTOM),
-    ]
-    probs_sum = None
-    with torch.no_grad():
-        for im in imgs:
-            t = transform_val(im).unsqueeze(0).to(device)
-            out = model(t)
-            p = torch.softmax(out, dim=1).cpu().numpy().ravel()
-            probs_sum = p if probs_sum is None else probs_sum + p
-    return probs_sum / len(imgs)
-
-def infer_whole(frame_bgr: np.ndarray) -> np.ndarray:
-    pil = Image.fromarray(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)).resize((IMG_SIZE, IMG_SIZE))
-    return infer_tta(pil)
-
-def topk_info(probs: np.ndarray, k: int = 3):
-    idxs = np.argsort(probs)[::-1][:k]
-    return [(class_names[int(i)], float(probs[int(i)])) for i in idxs]
-
-# ---------- menu ----------
-print("Selecione a fonte de entrada:")
-print("1 - Inserir imagem")
-print("2 - Usar câmera em tempo real")
-choice = input("Digite 1 ou 2: ").strip()
-
-OUT_DIR = Path("debug_rois")
-OUT_DIR.mkdir(exist_ok=True)
-
-# ---------- escolha do target_layer ----------
-# Ajuste aqui conforme seu backbone!
-# Exemplo para ResNet:
-# target_layer = model.layer4[-1]
-# Se for EfficientNet/MobileNet, troque por model.features[-1]
-print("[INFO] Configurando camada alvo para Grad-CAM.")
-try:
-    target_layer = model.layer4[-1]  # <- ajuste conforme sua rede
-except Exception:
-    target_layer = list(model.children())[-2]  # fallback tentativa
-
-gradcam = GradCAM(model, target_layer)
-
-# ---------- modo 1: imagem ----------
-# ---------- modo 1: imagem ----------
-if choice == "1":
-    IMAGE_PATH = input("Digite o caminho da imagem: ").strip()
-    if not os.path.exists(IMAGE_PATH):
-        raise FileNotFoundError(f"Imagem não encontrada: {IMAGE_PATH}")
-    frame = cv2.imread(IMAGE_PATH)
-    if frame is None:
-        raise RuntimeError(f"Falha ao carregar imagem: {IMAGE_PATH}")
-
-    probs = infer_whole(frame)
-    idx = int(np.argmax(probs))
-    name = class_names[idx]
-    prob = float(probs[idx])
-
-    # Grad-CAM (gera mapa na dimensão IMG_SIZE)
-    input_tensor = transform_val(
-        Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).resize((IMG_SIZE, IMG_SIZE))
-    ).unsqueeze(0).to(device)
-
-    cam = gradcam(input_tensor, class_idx=idx)  # cam em [0,1], shape (IMG_SIZE, IMG_SIZE)
-
-    # visualização pequena (para exibição)
-    cam_overlay_small = overlay_cam(cv2.resize(frame, (IMG_SIZE, IMG_SIZE)), cam)
-    cv2.putText(cam_overlay_small, f"{name} ({prob:.3f})", (20, 40),
-                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
-
-    cv2.imshow("Resultado + Grad-CAM", cam_overlay_small)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-
-    # --- cria overlay em resolução full-res (para salvar no banco) ---
-    H, W = frame.shape[:2]
-    cam_full = cv2.resize(cam, (W, H), interpolation=cv2.INTER_LINEAR)  # normalizado 0..1
-    cam_overlay_full = overlay_cam(frame.copy(), cam_full)
-    cv2.putText(cam_overlay_full, f"{name} ({prob:.3f})", (20, 40),
-                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
-
-    # opcional: salva local para depuração
-    save_path = OUT_DIR / "annotated_gradcam.png"
-    cv2.imwrite(str(save_path), cam_overlay_full)
-    print("[INFO] Resultado Grad-CAM (full-res) salvo em:", save_path)
-
-    # codifica e insere a imagem Grad-CAM full-res no banco (PNG)
-    is_success, buffer = cv2.imencode(".png", cam_overlay_full)
-    if not is_success:
-        raise RuntimeError("Falha ao codificar a imagem Grad-CAM para bytes.")
-    img_bytes = buffer.tobytes()
-
-    db.inserir_resultado(
-        img_bytes=img_bytes,
-        classe_prevista=name,
-        probabilidade=prob,
-        cidade=cidade,
-        temperatura=temp,
-        condicao=condicao,
-        chance_chuva=chance_chuva,
-        nome_arquivo=IMAGE_PATH  # opcional: armazena o caminho original
-    )
-    db_inserted = True
-    input_frame = frame.copy()    # mantém frame full-res para o pipeline
-    print("[INFO] Resultado (Grad-CAM) salvo no banco de dados (modo imagem).")
-
-
-
-# ---------- modo 2: camera ----------
-elif choice == "2":
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        raise RuntimeError("Não foi possível acessar a câmera.")
-    print("Pressione 'q' para encerrar.")
-
-    last_frame = None   # guarda o último frame full-res da câmera
-    last_name = None
-    last_prob = None
-
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            continue
-
-        # mantenha o frame full-resolution para processamento posterior
-        last_frame = frame.copy()
-
-        probs = infer_whole(frame)
-        idx = int(np.argmax(probs))
-        name = class_names[idx]
-        prob = float(probs[idx])
-
-        last_name = name
-        last_prob = prob
-
-        input_tensor = transform_val(
-            Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).resize((IMG_SIZE, IMG_SIZE))
-        ).unsqueeze(0).to(device)
-
-        cam = gradcam(input_tensor, class_idx=idx)
-        cam_overlay = overlay_cam(cv2.resize(frame, (IMG_SIZE, IMG_SIZE)), cam)
-
-        cv2.putText(cam_overlay, f"{name} ({prob:.2f})", (20, 40),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
-
-        cv2.imshow("Classificação + Grad-CAM", cam_overlay)
-
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            # visualização pequena (opcional)
-            save_path = OUT_DIR / "last_gradcam_small.png"
-            cv2.imwrite(str(save_path), cam_overlay)  # cam_overlay já é a versão pequena mostrada
-            # cria overlay full-res a partir do último frame capturado
-            Hf, Wf = last_frame.shape[:2]
-            cam_full = cv2.resize(cam, (Wf, Hf), interpolation=cv2.INTER_LINEAR)
-            cam_overlay_full = overlay_cam(last_frame.copy(), cam_full)
-            cv2.putText(cam_overlay_full, f"{name} ({prob:.2f})", (20, 40),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
-
-            # opcional: salvar local para depuração
-            save_path_full = OUT_DIR / "last_gradcam_full.png"
-            cv2.imwrite(str(save_path_full), cam_overlay_full)
-
-            # codifica e salva a imagem Grad-CAM full-res no banco
-            is_success, buffer = cv2.imencode(".png", cam_overlay_full)
-            if not is_success:
-                raise RuntimeError("Falha ao codificar a imagem Grad-CAM para bytes.")
-            img_bytes = buffer.tobytes()
-
-            db.inserir_resultado(
-                img_bytes=img_bytes,
-                classe_prevista=name,
-                probabilidade=prob,
-                cidade=cidade,
-                temperatura=temp,
-                condicao=condicao,
-                chance_chuva=chance_chuva,
-                nome_arquivo=None
-            )
-            db_inserted = True
-            input_frame = last_frame.copy()
-
-            print("[INFO] Resultado final (Grad-CAM full-res) salvo no banco de dados.")
-            break
-
-
-    cap.release()
-    cv2.destroyAllWindows()
-
-
-else:
-    raise ValueError("Opção inválida. Escolha 1 ou 2.")
-
-OUT_DIR = Path("debug_rois")
-OUT_DIR.mkdir(exist_ok=True)
-
-MIN_AREA_RATIO = 0.00015
-MAX_AREA_RATIO = 0.12
-ASPECT_MIN, ASPECT_MAX = 0.25, 4.0
-CIRC_MIN = 0.10
-
-USE_TTA = True
-CONFIDENCE_PRINT_TOPK = 3
-
-ALPHA_AREA = 0.6
-BETA_CONF = 1.0
-MIN_KEEPED_ROIS = 1
-
-WHOLE_WEIGHT = 0.6
-
-# Ajuste de nomes completos
-BROKEN_NAME  = "Broken soybeans"
-SKIN_NAME    = "Skin-damaged soybeans"
-SPOTTED_NAME = "Spotted soybeans"
-
-BROKEN_SKIN_MARGIN = 0.08
-SMALL_ROI_RATIO = 0.01
-
-# ---------- utilidades ----------
+# Funções de inferência (do script)
 def infer_tta(pil_img: Image.Image) -> np.ndarray:
     if USE_TTA:
         imgs = [
@@ -392,7 +224,6 @@ def infer_tta(pil_img: Image.Image) -> np.ndarray:
             out = model(t)
             p = torch.softmax(out, dim=1).cpu().numpy().ravel()
             probs_sum = p if probs_sum is None else probs_sum + p
-
     return probs_sum / len(imgs)
 
 def infer_whole(frame_bgr: np.ndarray) -> np.ndarray:
@@ -406,7 +237,7 @@ def softmax_normalize(v: np.ndarray, eps: float = 1e-9) -> np.ndarray:
 
 def topk_info(probs: np.ndarray, k: int = 3):
     idxs = np.argsort(probs)[::-1][:k]
-    return [(int(i), class_names[int(i)], float(probs[int(i)])) for i in idxs]
+    return [(class_names[int(i)], float(probs[int(i)])) for i in idxs]
 
 def class_index(name: str) -> int:
     try:
@@ -414,336 +245,231 @@ def class_index(name: str) -> int:
     except ValueError:
         return -1
 
-BROKEN_IDX  = class_index(BROKEN_NAME)
-SKIN_IDX    = class_index(SKIN_NAME)
-SPOTTED_IDX = class_index(SPOTTED_NAME)
+# Processamento principal (adaptado do script para função)
+def processar_imagem(frame: np.ndarray, cidade: str = "Jaragua do Sul") -> dict:
+    # Obter clima
+    clima_data = get_weather(cidade, 1)
+    if "erro" in clima_data:
+        raise HTTPException(status_code=500, detail=clima_data["detalhe"])
+    temp = clima_data["current"]["temp_c"]
+    condicao = clima_data["current"]["condition"]["text"]
+    chance_chuva = clima_data["forecast"]["forecastday"][0]["day"]["daily_chance_of_rain"]
 
-# ---------- leitura da imagem ----------
-if choice == "1":
-    # modo arquivo: ler a imagem do caminho informado
-    frame = cv2.imread(IMAGE_PATH)
-    if frame is None:
-        raise FileNotFoundError(IMAGE_PATH)
-else:
-    # modo câmera: usar o frame capturado e guardado em input_frame
-    if 'input_frame' not in globals() or input_frame is None:
-        raise RuntimeError("Nenhuma imagem disponível: capture com a câmera (opção 2) antes de processar.")
-    frame = input_frame
+    # Configurar GradCAM
+    target_layer = model.layer4[-1]  # Ajuste conforme modelo
+    gradcam = GradCAM(model, target_layer)
 
-H, W = frame.shape[:2]
-IMG_AREA = H * W
-print(f"[INFO] Image: {W}x{H}")
-print(f"[INFO] Classes: {class_names}")
+    # Inferência whole
+    whole_probs = infer_whole(frame)
 
-# ---------- segmentação ----------
-gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-blur = cv2.GaussianBlur(gray, (5, 5), 0)
-_, th = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    # Segmentação e ROIs (do script)
+    H, W = frame.shape[:2]
+    IMG_AREA = H * W
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    _, th = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    th = cv2.morphologyEx(th, cv2.MORPH_OPEN, kernel, 1)
+    th = cv2.morphologyEx(th, cv2.MORPH_CLOSE, kernel, 1)
+    contours, _ = cv2.findContours(th, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-th = cv2.morphologyEx(th, cv2.MORPH_OPEN, kernel, 1)
-th = cv2.morphologyEx(th, cv2.MORPH_CLOSE, kernel, 1)
+    min_area = int(MIN_AREA_RATIO * IMG_AREA)
+    max_area = int(MAX_AREA_RATIO * IMG_AREA)
+    counters = Counter()
+    rois = []
 
-contours, _ = cv2.findContours(th, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-print(f"[INFO] Contornos encontrados: {len(contours)}")
+    for i, cnt in enumerate(contours):
+        area = cv2.contourArea(cnt)
+        x, y, w, h = cv2.boundingRect(cnt)
+        per = cv2.arcLength(cnt, True)
+        ar = w / h if h > 0 else 0.0
+        circ = 4.0 * np.pi * (area / (per * per)) if per != 0 else 0.0
 
-min_area = int(MIN_AREA_RATIO * IMG_AREA)
-max_area = int(MAX_AREA_RATIO * IMG_AREA)
-
-# ---------- avaliação de ROIs ----------
-counters = Counter()
-rois = []
-
-for i, cnt in enumerate(contours):
-    area = cv2.contourArea(cnt)
-    x, y, w, h = cv2.boundingRect(cnt)
-    per = cv2.arcLength(cnt, True)
-
-    # inicializa ar e circ para garantir que existam sempre
-    ar = w / h if h > 0 else 0.0
-    circ = 4.0 * np.pi * (area / (per * per)) if per != 0 else 0.0
-
-    if per == 0:
-        counters["perimeter_zero"] += 1
-        reason = "perimeter_zero"
-    elif area < min_area or area > max_area:
-        counters["area_filtered"] += 1
-        reason = "area_filtered"
-    elif ar < ASPECT_MIN or ar > ASPECT_MAX:
-        counters["aspect_filtered"] += 1
-        reason = "aspect_filtered"
-    elif circ < CIRC_MIN:
-        counters["circularity_filtered"] += 1
-        reason = "circularity_filtered"
-    else:
-        reason = "kept"
-        counters["kept"] += 1
-
-    # define margem para corte do ROI
-    margin = max(2, int(0.04 * max(w, h)))
-    x0 = max(0, x - margin)
-    y0 = max(0, y - margin)
-    x1 = min(W, x + w + margin)
-    y1 = min(H, y + h + margin)
-
-    roi = frame[y0:y1, x0:x1]
-    cv2.imwrite(str(OUT_DIR / f"roi_{i:03d}_{reason}.png"), roi)
-
-    pil_roi = Image.fromarray(cv2.cvtColor(roi, cv2.COLOR_BGR2RGB))
-    probs = infer_tta(pil_roi)
-    peak = float(np.max(probs))
-    pred_idx = int(np.argmax(probs))
-
-    rois.append({
-        "i": i,
-        "bbox": (x0, y0, x1, y1),
-        "area": area,
-        "aspect": ar,
-        "circularity": circ,
-        "reason": reason,
-        "probs": probs,
-        "peak": peak,
-        "pred_idx": pred_idx,
-        "pred_name": class_names[pred_idx],
-    })
-
-    if i < 20:
-        print(f"[ROI {i:03d}] area={area:.1f} aspect={ar:.2f} circ={circ:.3f} "
-              f"reason={reason} pred={class_names[pred_idx]}({peak:.3f}) "
-              f"top{CONFIDENCE_PRINT_TOPK}: {topk_info(probs, CONFIDENCE_PRINT_TOPK)}")
-
-print("[INFO] Contadores:", dict(counters))
-
-# ---------- agregação de ROIs ----------
-fused = np.zeros(len(class_names), dtype=np.float64)
-sum_w = 0.0
-kept_for_fusion = 0
-
-for r in rois:
-    if r["reason"] != "kept":
-        continue
-    w_area = (max(r["area"], 1.0) / float(IMG_AREA)) ** ALPHA_AREA
-    w_conf = (max(r["peak"], 1e-6)) ** BETA_CONF
-    weight = w_area * w_conf
-    fused += weight * r["probs"]
-    sum_w += weight
-    kept_for_fusion += 1
-
-if kept_for_fusion < MIN_KEEPED_ROIS and len(rois) > 0:
-    r_best = max(rois, key=lambda r: r["peak"])
-    w_area = (max(r_best["area"], 1.0) / float(IMG_AREA)) ** ALPHA_AREA
-    w_conf = (max(r_best["peak"], 1e-6)) ** BETA_CONF
-    weight = w_area * w_conf
-    fused += weight * r_best["probs"]
-    sum_w += weight
-    kept_for_fusion = 1
-
-if sum_w > 0:
-    fused /= sum_w
-
-# ---------- integração da imagem inteira ----------
-whole_probs = infer_whole(frame)
-
-if sum_w > 0:
-    final_probs = (1.0 - WHOLE_WEIGHT) * fused + WHOLE_WEIGHT * whole_probs
-else:
-    final_probs = whole_probs.copy()
-
-final_probs = softmax_normalize(final_probs)
-final_idx = int(np.argmax(final_probs))
-final_name = class_names[final_idx]
-semente_identificada = final_name
-final_prob = float(final_probs[final_idx])
-
-# ---------- pós-processamento: Broken vs Skin-damaged ----------
-if BROKEN_IDX >= 0 and SKIN_IDX >= 0:
-    p_broken = float(final_probs[BROKEN_IDX])
-    p_skin = float(final_probs[SKIN_IDX])
-    if abs(p_broken - p_skin) <= BROKEN_SKIN_MARGIN:
-        if whole_probs[SKIN_IDX] > whole_probs[BROKEN_IDX]:
-            final_idx = SKIN_IDX
-            final_name = class_names[final_idx]
-            final_prob = float(final_probs[final_idx])
-    if final_idx == BROKEN_IDX and len(rois) > 0:
-        r_best = max(rois, key=lambda r: r["peak"])
-        roi_ratio = r_best["area"] / float(IMG_AREA)
-        if roi_ratio < SMALL_ROI_RATIO and whole_probs[SKIN_IDX] >= whole_probs[BROKEN_IDX] * 0.95:
-            final_idx = SKIN_IDX
-            final_name = class_names[final_idx]
-            final_prob = float(final_probs[final_idx])
-
-# ---------- pós-processamento: Classes saudáveis vs. danificadas ----------
-INTACT_IDX   = class_index("Intact soybeans")
-IMMATURE_IDX = class_index("Immature soybeans")
-
-if INTACT_IDX >= 0 and IMMATURE_IDX >= 0 and SPOTTED_IDX >= 0:
-    p_intact   = float(final_probs[INTACT_IDX])
-    p_immature = float(final_probs[IMMATURE_IDX])
-    p_skin     = float(final_probs[SKIN_IDX]) if SKIN_IDX >= 0 else 0.0
-    p_broken   = float(final_probs[BROKEN_IDX]) if BROKEN_IDX >= 0 else 0.0
-    p_spotted  = float(final_probs[SPOTTED_IDX])
-
-    if final_idx in (SKIN_IDX, BROKEN_IDX, SPOTTED_IDX) and len(rois) > 0:
-        r_best = max(rois, key=lambda r: r["peak"])
-        roi_ratio = r_best["area"] / float(IMG_AREA)
-        if roi_ratio < 0.02:
-            if whole_probs[INTACT_IDX] > max(whole_probs[SKIN_IDX], whole_probs[BROKEN_IDX], whole_probs[SPOTTED_IDX]):
-                final_idx = INTACT_IDX
-                final_name = class_names[final_idx]
-                final_prob = float(final_probs[final_idx])
-            elif whole_probs[IMMATURE_IDX] > max(whole_probs[SKIN_IDX], whole_probs[BROKEN_IDX], whole_probs[SPOTTED_IDX]):
-                final_idx = IMMATURE_IDX
-                final_name = class_names[final_idx]
-                final_prob = float(final_probs[final_idx])
-
-    healthy_max = max(p_intact, p_immature)
-    damage_max  = max(p_skin, p_broken, p_spotted)
-    if healthy_max >= damage_max * 0.98:
-        if p_intact >= p_immature:
-            final_idx = INTACT_IDX
+        if per == 0:
+            counters["perimeter_zero"] += 1
+            reason = "perimeter_zero"
+        elif area < min_area or area > max_area:
+            counters["area_filtered"] += 1
+            reason = "area_filtered"
+        elif ar < ASPECT_MIN or ar > ASPECT_MAX:
+            counters["aspect_filtered"] += 1
+            reason = "aspect_filtered"
+        elif circ < CIRC_MIN:
+            counters["circularity_filtered"] += 1
+            reason = "circularity_filtered"
         else:
-            final_idx = IMMATURE_IDX
-        final_name = class_names[final_idx]
-        final_prob = float(final_probs[final_idx])
+            reason = "kept"
+            counters["kept"] += 1
 
-# ---------- escolha de bbox ----------
-chosen_bbox = (0, 0, W, H)
-if len(rois) > 0:
-    same_class = [r for r in rois if r["pred_idx"] == final_idx]
-    if same_class:
-        r_draw = max(same_class, key=lambda r: r["peak"])
-    else:
-        r_draw = max(rois, key=lambda r: r["peak"])
-    chosen_bbox = r_draw["bbox"]
+        margin = max(2, int(0.04 * max(w, h)))
+        x0 = max(0, x - margin)
+        y0 = max(0, y - margin)
+        x1 = min(W, x + w + margin)
+        y1 = min(H, y + h + margin)
 
-# ---------- anotação ----------
-x0, y0, x1, y1 = chosen_bbox
-color = (0, 200, 0)
-out = frame.copy()
-cv2.rectangle(out, (x0, y0), (x1, y1), color, 3)
-cv2.putText(out, f"{final_name} ({final_prob:.3f})", (x0, max(30, y0 - 6)),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2, cv2.LINE_AA)
+        roi = frame[y0:y1, x0:x1]
+        pil_roi = Image.fromarray(cv2.cvtColor(roi, cv2.COLOR_BGR2RGB))
+        probs = infer_tta(pil_roi)
+        peak = float(np.max(probs))
+        pred_idx = int(np.argmax(probs))
 
-top_margin = max(50, int(0.12 * H))
-annot = cv2.copyMakeBorder(out, top_margin, 0, 0, 0, cv2.BORDER_CONSTANT, value=(255, 255, 255))
-label_text = f"Estado: {final_name}    Prob: {final_prob:.3f}"
-(fs_w, fs_h), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, max(0.6, top_margin/80), 2)
-cv2.putText(annot, label_text,
-            ((annot.shape[1] - fs_w)//2, top_margin//2 + fs_h//2),
-            cv2.FONT_HERSHEY_SIMPLEX, max(0.6, top_margin/80), (0, 0, 0), 2, cv2.LINE_AA)
+        rois.append({
+            "i": i,
+            "bbox": (x0, y0, x1, y1),
+            "area": area,
+            "aspect": ar,
+            "circularity": circ,
+            "reason": reason,
+            "probs": probs,
+            "peak": peak,
+            "pred_idx": pred_idx,
+            "pred_name": class_names[pred_idx],
+        })
 
-mx0 = int((x0 / W) * annot.shape[1])
-mx1 = int((x1 / W) * annot.shape[1])
-mini_h = max(6, int(top_margin * 0.20))
-myc = int(top_margin * 0.75)
-my0 = myc - mini_h // 2
-my1 = myc + mini_h // 2
-cv2.rectangle(annot, (mx0, my0), (mx1, my1), (0, 200, 0), -1)
-cv2.rectangle(annot, (mx0, my0), (mx1, my1), (0, 120, 0), 1)
-cv2.arrowedLine(annot, ((mx0 + mx1)//2, my1 + 1), ((x0 + x1)//2, y0 + top_margin),
-                (0, 120, 0), 2, tipLength=0.04)
+    # Agregação e fusão (do script)
+    fused = np.zeros(len(class_names), dtype=np.float64)
+    sum_w = 0.0
+    kept_for_fusion = 0
 
-save_path = OUT_DIR / "annotated_result.png"
-cv2.imwrite(str(save_path), annot)
-print("[INFO] Resultado anotado salvo em:", save_path)
+    for r in rois:
+        if r["reason"] != "kept":
+            continue
+        w_area = (max(r["area"], 1.0) / float(IMG_AREA)) ** ALPHA_AREA
+        w_conf = (max(r["peak"], 1e-6)) ** BETA_CONF
+        weight = w_area * w_conf
+        fused += weight * r["probs"]
+        sum_w += weight
+        kept_for_fusion += 1
 
-# ---------- resumo ----------
-summary = {
-    "image_mode": choice,
-    "classes": class_names,
-    "final_class": final_name,
-    "final_prob": final_prob,
-    "top3_final": topk_info(final_probs, 3),
-    "whole_top3": topk_info(whole_probs, 3),
-    "fusion_params": {
-        "ALPHA_AREA": ALPHA_AREA,
-        "BETA_CONF": BETA_CONF,
-        "WHOLE_WEIGHT": WHOLE_WEIGHT
-    },
-    "counters": dict(counters),
-    "num_rois": len(rois),
-}
-with open(OUT_DIR / "summary_best.json", "w", encoding="utf-8") as f:
-    json.dump(summary, f, ensure_ascii=False, indent=2)
+    if kept_for_fusion < MIN_KEEPED_ROIS and len(rois) > 0:
+        r_best = max(rois, key=lambda r: r["peak"])
+        w_area = (max(r_best["area"], 1.0) / float(IMG_AREA)) ** ALPHA_AREA
+        w_conf = (max(r_best["peak"], 1e-6)) ** BETA_CONF
+        weight = w_area * w_conf
+        fused += weight * r_best["probs"]
+        sum_w += weight
+        kept_for_fusion = 1
 
-pred_dist = Counter([r["pred_idx"] for r in rois])
-print("[INFO] Distribuição de predições por ROI:", {class_names[i]: c for i, c in pred_dist.items()})
-print("[DONE]")
+    if sum_w > 0:
+        fused /= sum_w
+
+    final_probs = (1.0 - WHOLE_WEIGHT) * fused + WHOLE_WEIGHT * whole_probs if sum_w > 0 else whole_probs.copy()
+    final_probs = softmax_normalize(final_probs)
+    final_idx = int(np.argmax(final_probs))
+    final_name = class_names[final_idx]
+    final_prob = float(final_probs[final_idx])
+
+    # Pós-processamento (Broken vs Skin, Healthy vs Damaged) - do script
+    BROKEN_IDX = class_index(BROKEN_NAME)
+    SKIN_IDX = class_index(SKIN_NAME)
+    SPOTTED_IDX = class_index(SPOTTED_NAME)
+    INTACT_IDX = class_index("Intact soybeans")
+    IMMATURE_IDX = class_index("Immature soybeans")
+
+    if BROKEN_IDX >= 0 and SKIN_IDX >= 0:
+        p_broken = float(final_probs[BROKEN_IDX])
+        p_skin = float(final_probs[SKIN_IDX])
+        if abs(p_broken - p_skin) <= BROKEN_SKIN_MARGIN:
+            if whole_probs[SKIN_IDX] > whole_probs[BROKEN_IDX]:
+                final_idx = SKIN_IDX
+                final_name = class_names[final_idx]
+                final_prob = float(final_probs[final_idx])
+        if final_idx == BROKEN_IDX and len(rois) > 0:
+            r_best = max(rois, key=lambda r: r["peak"])
+            roi_ratio = r_best["area"] / float(IMG_AREA)
+            if roi_ratio < SMALL_ROI_RATIO and whole_probs[SKIN_IDX] >= whole_probs[BROKEN_IDX] * 0.95:
+                final_idx = SKIN_IDX
+                final_name = class_names[final_idx]
+                final_prob = float(final_probs[final_idx])
+
+    if INTACT_IDX >= 0 and IMMATURE_IDX >= 0 and SPOTTED_IDX >= 0:
+        p_intact = float(final_probs[INTACT_IDX])
+        p_immature = float(final_probs[IMMATURE_IDX])
+        p_skin = float(final_probs[SKIN_IDX]) if SKIN_IDX >= 0 else 0.0
+        p_broken = float(final_probs[BROKEN_IDX]) if BROKEN_IDX >= 0 else 0.0
+        p_spotted = float(final_probs[SPOTTED_IDX])
+
+        if final_idx in (SKIN_IDX, BROKEN_IDX, SPOTTED_IDX) and len(rois) > 0:
+            r_best = max(rois, key=lambda r: r["peak"])
+            roi_ratio = r_best["area"] / float(IMG_AREA)
+            if roi_ratio < 0.02:
+                if whole_probs[INTACT_IDX] > max(whole_probs[SKIN_IDX], whole_probs[BROKEN_IDX], whole_probs[SPOTTED_IDX]):
+                    final_idx = INTACT_IDX
+                    final_name = class_names[final_idx]
+                    final_prob = float(final_probs[final_idx])
+                elif whole_probs[IMMATURE_IDX] > max(whole_probs[SKIN_IDX], whole_probs[BROKEN_IDX], whole_probs[SPOTTED_IDX]):
+                    final_idx = IMMATURE_IDX
+                    final_name = class_names[final_idx]
+                    final_prob = float(final_probs[final_idx])
+
+        healthy_max = max(p_intact, p_immature)
+        damage_max = max(p_skin, p_broken, p_spotted)
+        if healthy_max >= damage_max * 0.98:
+            if p_intact >= p_immature:
+                final_idx = INTACT_IDX
+            else:
+                final_idx = IMMATURE_IDX
+            final_name = class_names[final_idx]
+            final_prob = float(final_probs[final_idx])
+
+    # Anotação da imagem (com bbox e texto)
+    chosen_bbox = (0, 0, W, H)
+    if len(rois) > 0:
+        same_class = [r for r in rois if r["pred_idx"] == final_idx]
+        r_draw = max(same_class, key=lambda r: r["peak"]) if same_class else max(rois, key=lambda r: r["peak"])
+        chosen_bbox = r_draw["bbox"]
+
+    x0, y0, x1, y1 = chosen_bbox
+    color = (0, 200, 0)
+    out = frame.copy()
+    cv2.rectangle(out, (x0, y0), (x1, y1), color, 3)
+    cv2.putText(out, f"{final_name} ({final_prob:.3f})", (x0, max(30, y0 - 6)),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2, cv2.LINE_AA)
+
+    top_margin = max(50, int(0.12 * H))
+    annot = cv2.copyMakeBorder(out, top_margin, 0, 0, 0, cv2.BORDER_CONSTANT, value=(255, 255, 255))
+    label_text = f"Estado: {final_name}    Prob: {final_prob:.3f}"
+    (fs_w, fs_h), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, max(0.6, top_margin/80), 2)
+    cv2.putText(annot, label_text,
+                ((annot.shape[1] - fs_w)//2, top_margin//2 + fs_h//2),
+                cv2.FONT_HERSHEY_SIMPLEX, max(0.6, top_margin/80), (0, 0, 0), 2, cv2.LINE_AA)
+
+    mx0 = int((x0 / W) * annot.shape[1])
+    mx1 = int((x1 / W) * annot.shape[1])
+    mini_h = max(6, int(top_margin * 0.20))
+    myc = int(top_margin * 0.75)
+    my0 = myc - mini_h // 2
+    my1 = myc + mini_h // 2
+    cv2.rectangle(annot, (mx0, my0), (mx1, my1), (0, 200, 0), -1)
+    cv2.rectangle(annot, (mx0, my0), (mx1, my1), (0, 120, 0), 1)
+    cv2.arrowedLine(annot, ((mx0 + mx1)//2, my1 + 1), ((x0 + x1)//2, y0 + top_margin),
+                    (0, 120, 0), 2, tipLength=0.04)
+
+    # --------------------------
+    # Gerar Grad-CAM e overlay
+    # --------------------------
+    # Preparar o tensor de entrada (tamanho esperado pelo modelo)
+    pil_whole = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).resize((IMG_SIZE, IMG_SIZE))
+    input_t = transform_val(pil_whole).unsqueeze(0).to(device)
+
+    # Gera o mapa Grad-CAM para a classe final
+    cam_map = gradcam(input_t, class_idx=final_idx)  # resultado em tamanho IMG_SIZE x IMG_SIZE, normalizado 0..1
+
+    # Redimensionar cam para o tamanho original da imagem
+    cam_resized = cv2.resize(cam_map, (W, H), interpolation=cv2.INTER_LINEAR)
+
+    # Criar overlay Grad-CAM sobre a imagem original (BGR)
+    overlay = overlay_cam(frame, cam_resized, alpha=0.5)
+
+    # Codificar imagem overlay para base64 (PNG)
+    is_success, buffer = cv2.imencode(".png", overlay)
+    if not is_success:
+        raise HTTPException(status_code=500, detail="Falha ao codificar imagem Grad-CAM")
+    img_bytes = buffer.tobytes()
+    img_base64 = base64.b64encode(img_bytes).decode("utf-8")
 
 
-
-db.inserir_resultado(img_bytes, name, final_prob, cidade, temp, condicao, chance_chuva)
-
-
-#-------------------- Agro API -----------------------------
-
-
-consumer_key = "fyfa_Jsspy6meIrgVpFEonTxeUIa"
-consumer_secret = "14CHcEvIvoThD37ObxwlzgKPrn0a"
-
-# --- Função para gerar Access Token ---
-def get_access_token(consumer_key, consumer_secret):
-    credentials = f"{consumer_key}:{consumer_secret}"
-    b64_credentials = base64.b64encode(credentials.encode()).decode()
-    token_url = "https://api.cnptia.embrapa.br/token"
-    data = {"grant_type": "client_credentials"}
-    headers = {"Authorization": f"Basic {b64_credentials}"}
-    
-    response = requests.post(token_url, data=data, headers=headers)
-    if response.status_code == 200:
-        return response.json()["access_token"]
-    else:
-        raise Exception(f"Erro ao obter token: {response.status_code} {response.text}")
-
-
-# --- Função para consultar RespondeAgro ---
-def consulta_respondeagro(access_token, query, from_record=0, size=10):
-    url = "https://api.cnptia.embrapa.br/respondeagro/v1/_search/template"
-    headers = {"Authorization": f"Bearer {access_token}"}
-    payload = {
-        "id": "query_all",
-        "params": {
-            "query_string": query,
-            "from": from_record,
-            "size": size
-        }
-    }
-    
-    response = requests.post(url, headers=headers, json=payload)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        raise Exception(f"Erro RespondeAgro: {response.status_code} {response.text}")
-
-# --- Função para exibir resultados de forma amigável ---
-def exibir_resultados_amigavel(resultados):
-    hits = resultados.get("hits", {}).get("hits", [])
-    if not hits:
-        print("Nenhum resultado encontrado para sua pergunta.")
-        return
-    
-    for i, item in enumerate(hits, start=1):
-        source = item["_source"]
-        print(f"\nResultado {i}:")
-        print(f"Pergunta: {source.get('question')}")
-        # Remove tags HTML da resposta
-        resposta_texto = re.sub(r'<.*?>', '', source.get('answer', ''))
-        print(f"Resposta: {resposta_texto}\n")
-        print(f"Capítulo: {source.get('chapter')}")
-        print(f"Livro: {source.get('book')}")
-        print(f"Ano: {source.get('year')}")
-        print(f"PDF: {source.get('pdf')}")
-        print(f"EPUB: {source.get('epub')}")
-        print("-" * 50)
-
-# --- Função de recomendações (atualizada) ---
-def responde_agro(final_name: str, max_queries_per_term: int = 10):
-    """
-    Gera recomendações agronômicas a partir da classificação (final_name)
-    e consulta RespondeAgro por uma série de queries (da mais específica
-    para a mais genérica). Exibe resultados quando encontrados.
-    """
-    # Mapeamento principal (termo curto / keyword)
+    # Recomendações Agro (adaptado)
     recomendacao_map = {
         "Intact soybeans": "sementes de soja saudáveis",
         "Immature soybeans": "sementes de soja imaturas",
@@ -751,99 +477,382 @@ def responde_agro(final_name: str, max_queries_per_term: int = 10):
         "Skin-damaged soybeans": "soja com casca danificada",
         "Spotted soybeans": "soja com manchas",
     }
-
-    # Listas de consultas (sinônimos e frases curtas) para cada classe
     query_variants = {
-        "Intact soybeans": [
-            "características fisicas de sementes de soja saudáveis",
-            "recomendações para sementes de soja saudáveis"
-        ],
-        "Immature soybeans": [
-            "características de sementes de soja imaturas",
-            "recomendações para sementes de soja imaturas"
-        ],
-        "Broken soybeans": [
-            "características de sementes de soja quebradas",
-            "recomendações para sementes de soja quebradas"
-        ],
-        "Skin-damaged soybeans": [
-            "características de sementes de soja com casca danificada",
-            "recomendações para sementes de soja casca danificada"
-        ],
-        "Spotted soybeans": [
-            "características de sementes de soja com manchas",
-            "recomendações para sementes de soja com manchas"
-        ]
+        "Intact soybeans": ["características fisicas de sementes de soja saudáveis", "recomendações para sementes de soja saudáveis"],
+        "Immature soybeans": ["características de sementes de soja imaturas", "recomendações para sementes de soja imaturas"],
+        "Broken soybeans": ["características de sementes de soja quebradas", "recomendações para sementes de soja quebradas"],
+        "Skin-damaged soybeans": ["características de sementes de soja com casca danificada", "recomendações para sementes de soja casca danificada"],
+        "Spotted soybeans": ["características de sementes de soja com manchas", "recomendações para sementes de soja com manchas"]
     }
+    generic_queries = ["manejo sementes de soja", "qualidade de sementes de soja", "controle de doenças em sementes de soja", "boas práticas sementes soja"]
 
-    # Fallbacks genéricos
-    generic_queries = [
-        "manejo sementes de soja",
-        "qualidade de sementes de soja",
-        "controle de doenças em sementes de soja",
-        "boas práticas sementes soja"
-    ]
-
-    # Seleciona a lista de queries a usar
     base_term = recomendacao_map.get(final_name, "soja")
     queries = query_variants.get(final_name, []) + [base_term] + generic_queries
 
-    print(f"[INFO] Consulta recomendação para: {final_name}")
-    try:
-        token = get_access_token(consumer_key, consumer_secret)
-    except Exception as e:
-        print("[ERRO] Falha ao obter token RespondeAgro:", e)
-        return
-
-    # Tenta cada query em sequência; se encontrar resultados, exibe e sai
-    any_result = False
-    tried = set()
+    token = get_access_token(AGRO_CONSUMER_KEY, AGRO_CONSUMER_SECRET)
+    recomendacoes = []
     for q in queries:
-        # evita repetir a mesma query
-        q_clean = q.strip().lower()
-        if q_clean in tried:
-            continue
-        tried.add(q_clean)
-
-        # limita número de tentativas se houver muitas variantes
-        if len(tried) > max_queries_per_term + 3:
-            # permite algumas variações extras, depois sai do loop principal
-            pass
-
-        print(f"[INFO] Tentando query: '{q}'")
-        try:
-            resultados = consulta_respondeagro(token, q, from_record=0, size=10)
-        except Exception as exc:
-            print(f"[ERRO] Consulta RespondeAgro falhou para '{q}':", exc)
-            continue
-
+        resultados = consulta_respondeagro(token, q, 0, 10)
         hits = resultados.get("hits", {}).get("hits", [])
         if hits:
-            any_result = True
-            print(f"[INFO] Resultados encontrados para '{q}':")
-            exibir_resultados_amigavel(resultados)
-            # não tentar mais ao encontrar algo relevante
-            return
+            for item in hits:
+                source = item["_source"]
+                resposta_texto = re.sub(r'<.*?>', '', source.get('answer', ''))
+                recomendacoes.append({
+                    "pergunta": source.get('question'),
+                    "resposta": resposta_texto,
+                    "capitulo": source.get('chapter'),
+                    "livro": source.get('book'),
+                    "ano": source.get('year'),
+                    "pdf": source.get('pdf'),
+                    "epub": source.get('epub')
+                })
+            break  # Para ao encontrar resultados
 
-    # Se chegou aqui, nenhuma query retornou hits; tenta uma pesquisa ampla paginada
-    print("[INFO] Nenhum resultado direto encontrado. Tentando pesquisa ampla (tamanho maior).")
+    # Retorno
+    return {
+        "classe_prevista": final_name,
+        "probabilidade": final_prob,
+        "imagem_anotada_base64": img_base64,
+        "clima": {
+            "cidade": cidade,
+            "temperatura": temp,
+            "condicao": condicao,
+            "chance_chuva": chance_chuva
+        },
+        "recomendacoes": recomendacoes
+    }
+
+# Endpoints da API
+
+
+class UsuarioRequest(BaseModel):
+    usuario_id: int
+
+# Modelo de resposta
+class UsuarioResponse(BaseModel):
+    usuario_id: int
+    mensagem: str
+
+@app.post("/usuario", response_model=UsuarioResponse)
+def api_usuario(request: UsuarioRequest):
+    # Validação simples do ID
+    if request.usuario_id <= 0:
+        raise HTTPException(status_code=400, detail="ID inválido")
+
+    # Retorna o ID recebido e uma mensagem
+    return {"usuario_id": request.usuario_id, "mensagem": "Usuário recebido com sucesso"}
+
+import qrcode
+import base64
+from io import BytesIO
+
+def gerar_url_detalhes(semente_id: int) -> str:
+    """
+    Gera a URL de detalhes para um resultado de semente.
+    """
+    return f"https://meusistema.com/resultados/{semente_id}"
+
+def gerar_qrcode_base64(url: str) -> str:
+    """
+    Gera um QR Code a partir de uma URL e retorna em formato base64.
+    """
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(url)
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffered = BytesIO()
+    img.save(buffered, format="PNG")
+    img_bytes = buffered.getvalue()
+    return base64.b64encode(img_bytes).decode("utf-8")
+
+@app.post("/processar_imagem", response_model=ResultadoProcessamento)
+async def api_processar_imagem(
+    arquivo: UploadFile = File(...),
+    cidade: Optional[str] = "Jaragua do Sul",
+    usuario_id: int = Form(...)
+):
     try:
-        resultados_amplos = consulta_respondeagro(token, base_term, from_record=0, size=20)
-        hits_amplos = resultados_amplos.get("hits", {}).get("hits", [])
-        if hits_amplos:
-            print(f"[INFO] Resultados amplos encontrados para '{base_term}':")
-            exibir_resultados_amigavel(resultados_amplos)
-            return
+        contents = await arquivo.read()
+        nparr = np.frombuffer(contents, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if frame is None:
+            raise HTTPException(status_code=400, detail="Imagem inválida")
+
+        resultado = processar_imagem(frame, cidade)
+
+        # --- geração de recomendações inteligentes ---
+        try:
+            recomendacoes = gerar_recomendacoes_smart(resultado, usuario_profile={"usuario_id": usuario_id})
+            resultado["recomendacoes"] = recomendacoes
+        except Exception as e:
+            print("Aviso: erro ao gerar recomendações:", e)
+            resultado["recomendacoes"] = []
+
+        semente_id = db.obter_proximo_id()  # ou o ID que será usado
+        url_detalhes = f"http://127.0.0.1:5500/frontend/item.html?id={semente_id}"
+        qrcode_base64 = gerar_qrcode_base64(url_detalhes)
+
+        # Salvar no BD (adaptado do script)
+        is_success, buffer = cv2.imencode(".png", cv2.imdecode(np.frombuffer(base64.b64decode(resultado["imagem_anotada_base64"]), np.uint8), cv2.IMREAD_COLOR))
+        img_bytes = buffer.tobytes()
+
+        db.inserir_resultado(
+            usuario_id=usuario_id,
+            img_bytes=img_bytes,
+            classe_prevista=resultado["classe_prevista"],
+            probabilidade=resultado["probabilidade"],
+            cidade=resultado["clima"]["cidade"],
+            temperatura=resultado["clima"]["temperatura"],
+            condicao=resultado["clima"]["condicao"],
+            chance_chuva=resultado["clima"]["chance_chuva"],
+            nome_arquivo=arquivo.filename,
+            data_hora=datetime.now(),
+            url_detalhes=url_detalhes,
+            qrcode_base64=qrcode_base64
+        )
+
+
+        if not resultado.get("imagem_anotada_base64"):
+            raise HTTPException(status_code=400, detail="Imagem anotada não gerada pela função processar_imagem")
+
+    # Conferir tamanho
+        print("Tamanho da imagem em bytes:", len(img_bytes))
+
+        return resultado
+    except HTTPException as he:
+        raise he
     except Exception as e:
-        print("[ERRO] Consulta ampla falhou:", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
-    # Por fim, exibe mensagem objetiva com sugestões de próximas ações
-    print("[WARN] Nenhum resultado encontrado no RespondeAgro para as consultas geradas.")
-    print("[SUGESTÃO] Experimente consultar manualmente com um dos termos abaixo ou revisitar a formulação:")
-    for s in (query_variants.get(final_name, [])[:3] + generic_queries[:2]):
-        print("  -", s)
-    print("[INFO] A API pode não conter conteúdo indexado para termos muito específicos; usar termos mais gerais costuma retornar resultados.")
-    return
+@app.get("/resultado/{sement_id}", response_model=dict)
+def obter_resultado(sement_id: int):
+    resultado = db.obter_resultado_por_id(sement_id)
+    usuario_id: int = Form(...)
+    if not resultado:
+        raise HTTPException(status_code=404, detail="Resultado não encontrado")
 
-# -------------------- Chamada da função --------------------
+    # Garantir URL e QR Code
+    resultado["url_detalhes"] = resultado.get("url_detalhes") or f"http://127.0.0.1:5500/frontend/item.html?id={sement_id}"
+    resultado["qrcode_base64"] = resultado.get("qrcode_base64") or gerar_qrcode_base64(resultado["url_detalhes"])
 
+    # Converter bytes para base64
+    img_bytes = resultado.get("img_bytes")
+    if img_bytes:
+        resultado["imagem_anotada_base64"] = base64.b64encode(img_bytes).decode("utf-8")
+    else:
+        resultado["imagem_anotada_base64"] = None
+
+    
+
+    resultado["data_hora"] = resultado.get("data_hora").isoformat() if resultado.get("data_hora") else datetime.now().isoformat()
+
+        # --- geração de recomendações inteligentes ---
+    try:
+        recomendacoes = gerar_recomendacoes_smart(resultado, usuario_profile={"usuario_id": usuario_id})
+        resultado["recomendacoes"] = recomendacoes
+
+    except Exception as e:
+            print("Aviso: erro ao gerar recomendações:", e)
+            resultado["recomendacoes"] = []
+    return resultado
+
+@app.get("/clima", response_model=ClimaResponse)
+def api_clima(cidade: str = "Jaragua do Sul"):
+    clima = get_weather(cidade, 1)
+    return {
+        "cidade": clima["location"]["name"],
+        "temperatura": clima["current"]["temp_c"],
+        "condicao": clima["current"]["condition"]["text"],
+        "chance_chuva": clima["forecast"]["forecastday"][0]["day"]["daily_chance_of_rain"]
+    }
+
+
+
+
+@app.get("/recomendacoes_agro/{classe}")
+def api_recomendacoes_agro(classe: str):
+    # Chamada direta à função de recomendações
+    # Nota: Esta é uma simplificação; integre com processar_imagem se necessário
+    token = get_access_token(AGRO_CONSUMER_KEY, AGRO_CONSUMER_SECRET)
+    # Use uma query simples baseada na classe
+    query = f"recomendações para {classe.lower()}"
+    resultados = consulta_respondeagro(token, query, 0, 10)
+    hits = resultados.get("hits", {}).get("hits", [])
+    recomendacoes = []
+    for item in hits:
+        source = item["_source"]
+        resposta_texto = re.sub(r'<.*?>', '', source.get('answer', ''))
+        recomendacoes.append({
+            "pergunta": source.get('question'),
+            "resposta": resposta_texto,
+            "capitulo": source.get('chapter'),
+            "livro": source.get('book'),
+            "ano": source.get('year'),
+            "pdf": source.get('pdf'),
+            "epub": source.get('epub')
+        })
+    return {"classe": classe, "recomendacoes": recomendacoes}
+
+
+
+from visaoComputacional import *
+
+# Mapas de sinônimos ou variações de consulta por classe
+query_variants = {
+    "Intact soybeans": [
+        "soja intacta",
+        "sementes de soja sadias",
+        "qualidade de grãos de soja"
+    ],
+    "Immature soybeans": [
+        "soja imatura",
+        "maturação de sementes de soja",
+        "soja verde"
+    ],
+    "Broken soybeans": [
+        "soja quebrada",
+        "sementes danificadas mecanicamente",
+        "quebra de grãos de soja"
+    ],
+    "Skin-damaged soybeans": [
+        "soja com dano de casca",
+        "danos de tegumento em sementes de soja",
+        "ferimentos em casca de soja"
+    ],
+    "Spotted soybeans": [
+        "soja manchada",
+        "manchas em sementes de soja",
+        "infecção fúngica em grãos de soja"
+    ]
+}
+
+def clima_risk_factor(clima):
+    # Exemplo simples: quanto maior chance_chuva, maior o risco
+    try:
+        chance = int(clima.get("chance_chuva", 0))
+    except:
+        chance = 0
+    # normaliza 0..1
+    return min(1.0, max(0.0, chance / 100.0))
+
+# Mapa de severidade manual (0..1)
+SEVERITY_MAP = {
+    "Intact soybeans": 0.0,
+    "Immature soybeans": 0.3,
+    "Broken soybeans": 0.6,
+    "Skin-damaged soybeans": 0.7,
+    "Spotted soybeans": 0.8
+}
+
+def gerar_recomendacoes_smart(resultado, usuario_profile=None):
+    """
+    resultado: dict retornado por processar_imagem
+    usuario_profile: dict opcional com preferências (ex: 'mercado_exportacao':True)
+    Retorna: lista de recomendações estruturadas
+    """
+    classe = resultado["classe_prevista"]
+    prob = float(resultado["probabilidade"])
+    clima = resultado.get("clima", {})
+    rois = resultado.get("rois", [])  # se quiser manter rois no retorno
+    # calcular max roi ratio (se rois presentes)
+    max_roi_ratio = 0.0
+    if rois:
+        H = resultado.get("imagem_shape", {}).get("H", None)
+        W = resultado.get("imagem_shape", {}).get("W", None)
+        if H and W:
+            IMG_AREA = H * W
+            max_roi_ratio = max([r["area"] / float(IMG_AREA) for r in rois]) if rois else 0.0
+        else:
+            # fallback: use roi area fraction se salva
+            max_roi_ratio = max([r.get("area_ratio", 0.0) for r in rois]) if rois else 0.0
+
+    # parâmetros de peso (ajustáveis)
+    w_class, w_roi, w_clima, w_user = 0.5, 0.2, 0.2, 0.1
+    alpha_area = ALPHA_AREA if 'ALPHA_AREA' in globals() else 0.6
+
+    score = (w_class * prob
+             + w_roi * (max_roi_ratio ** alpha_area)
+             + w_clima * clima_risk_factor(clima)
+             + w_user * (1.0 if usuario_profile and usuario_profile.get("sensitive_market") else 0.0)
+            )
+    # normalizar (apenas heurístico)
+    score = min(1.0, max(0.0, score))
+
+    # Prioridade por score
+    if score >= 0.75:
+        prioridade = "alta"
+    elif score >= 0.4:
+        prioridade = "media"
+    else:
+        prioridade = "baixa"
+
+    # Buscar recomendações em RespondeAgro (tenta primeiro queries já existentes)
+    token = get_access_token(AGRO_CONSUMER_KEY, AGRO_CONSUMER_SECRET)
+    base_queries = query_variants.get(classe, [classe])
+    recomendacoes_texts = []
+    for q in base_queries + ["manejo sementes de soja", "qualidade de sementes de soja"]:
+        resp = consulta_respondeagro(token, q, 0, 5)
+        hits = resp.get("hits", {}).get("hits", [])
+        for h in hits:
+            src = h.get("_source", {})
+            texto = re.sub(r'<.*?>', '', src.get("answer", "") or "")
+            if texto:
+                recomendacoes_texts.append({
+                    "pergunta": src.get("question"),
+                    "resposta": texto,
+                    "fonte": {
+                        "capitulo": src.get("chapter"),
+                        "livro": src.get("book"),
+                        "ano": src.get("year"),
+                        "pdf": src.get("pdf")
+                    }
+                })
+        if recomendacoes_texts:
+            break
+
+    # Se não encontrou nada, gerar recomendações internas (templates)
+    if not recomendacoes_texts:
+        # exemplo simples
+        if classe == "Spotted soybeans":
+            recomendacoes_texts.append({
+                "pergunta": "Providências iniciais",
+                "resposta": "Isolar amostras e enviar para análise laboratorial; reduzir umidade de armazenamento; rastrear lote."
+            })
+        else:
+            recomendacoes_texts.append({
+                "pergunta": "Boas práticas",
+                "resposta": "Separar lotes, reduzir tempo de armazenamento, monitorar temperatura e umidade."
+            })
+
+    # Monta lista final com metadata
+    recs_struct = []
+    for r in recomendacoes_texts:
+        recs_struct.append({
+            "acao": r.get("resposta"),
+            "motivo": f"Classe: {classe}, prob: {prob:.3f}, prioridade calculada: {prioridade}",
+            "prioridade": prioridade,
+            "score": score,
+            "fonte": r.get("fonte", {}),
+            "evidencia": {
+                "classe": classe,
+                "probabilidade": prob,
+                "max_roi_ratio": max_roi_ratio,
+                "clima": clima
+            }
+        })
+
+    return recs_struct
+
+
+
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)

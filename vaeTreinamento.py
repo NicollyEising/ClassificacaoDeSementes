@@ -1,5 +1,6 @@
 import os
 import math
+from pathlib import Path
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -9,7 +10,11 @@ from tqdm import tqdm
 import lpips
 from PIL import Image
 import numpy as np
-
+from bancoDeDados import *
+import re
+from pathlib import Path
+from torchvision import utils as tv_utils
+from PIL import Image
 # ------------------- Hiperparâmetros -------------------
 DEVICE        = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 IMG_SIZE      = 128
@@ -280,17 +285,71 @@ def train(data_dir, checkpoint_path="checkpoint.pth", best_model_path="best_mode
 
     return n_cls
 
-# ----------- Geração de Amostras após o Treino (1 categoria) -----------
-def gerar_amostras(peso_arquivo, pasta_saida, categoria, num_imgs=100, seed: int = 0):
+# inserir no começo do arquivo (se ainda não importou)
+import unicodedata
+import tempfile
+import shutil
+import os
+from pathlib import Path
+from torchvision import utils as tv_utils
+from PIL import Image
+
+def _sanitize_filename_windows(name: str, max_len: int = 150) -> str:
+    """
+    Limpeza agressiva para Windows:
+    - normaliza (NFKC),
+    - remove controles (ord < 32) e DEL (127),
+    - remove chars proibidos <>:"/\\|?*,
+    - remove pontos/espacos finais,
+    - reduz tamanho do nome se necessário.
+    """
+    # normaliza
+    name = unicodedata.normalize("NFKC", name)
+
+    # remove caracteres de controle
+    name = "".join(ch for ch in name if ord(ch) >= 32 and ord(ch) != 127)
+
+    # remove caracteres proibidos
+    name = re.sub(r'[<>:"/\\|?*]', '_', name)
+
+    # collapse underscores
+    name = re.sub(r'[_]+', '_', name)
+
+    # strip leading/trailing spaces and dots
+    name = name.strip(' .')
+
+    # garante comprimento máximo razoável
+    if len(name) > max_len:
+        name = name[:max_len]
+    return name or "file"
+
+def _maybe_prefix_long_path(path_str: str) -> str:
+    """
+    Se for Windows e comprimento > ~250, adiciona prefixo \\?\ para suportar long paths.
+    Requer caminho absoluto.
+    """
+    if os.name == "nt":
+        abs_path = os.path.abspath(path_str)
+        if len(abs_path) > 250 and not abs_path.startswith(r"\\?\\"):
+            return r"\\?\\" + abs_path
+        return abs_path
+    else:
+        return path_str
+
+def gerar_amostras(peso_arquivo, pasta_saida, categoria, num_imgs=100, seed: int = 0, start_idx: int = 0):
+    """
+    Gera amostras a partir de um checkpoint VAE, versão robusta para Windows:
+    - sanitiza nomes,
+    - tenta fallback via prefixo \\?\ para long paths,
+    - salva via tempfile+replace se necessário,
+    - permite retomar a partir de start_idx.
+    """
     torch.manual_seed(seed)
 
     checkpoint = torch.load(peso_arquivo, map_location=DEVICE)
     n_cls = checkpoint.get('num_classes', None)
-
     if n_cls is None:
         raise ValueError("Arquivo de peso não contém 'num_classes'.")
-
-    # como o treino foi feito apenas para uma categoria, n_cls deve ser 1
     if n_cls != 1:
         raise ValueError(f"Modelo deveria ter 1 classe, mas possui {n_cls} classes.")
 
@@ -298,17 +357,105 @@ def gerar_amostras(peso_arquivo, pasta_saida, categoria, num_imgs=100, seed: int
     vae.load_state_dict(checkpoint['model'])
     vae.eval()
 
-    # pasta principal da categoria
-    pasta_classe = os.path.join(pasta_saida, categoria.replace(" ", "_"))
-    os.makedirs(pasta_classe, exist_ok=True)
+    pasta_classe = Path(pasta_saida) / categoria.replace(" ", "_")
+    pasta_classe.mkdir(parents=True, exist_ok=True)
+    dirpath = str(pasta_classe)
 
-    with torch.no_grad():
-        for idx in range(num_imgs):
+    erros = []
+    for idx in range(start_idx, num_imgs):
+        try:
             z = torch.randn(1, LATENT_DIM, device=DEVICE)
-            oh = F.one_hot(torch.tensor([0], device=DEVICE), n_cls).float().to(DEVICE)  # apenas classe 0
+            oh = F.one_hot(torch.tensor([0], device=DEVICE), n_cls).float().to(DEVICE)
             fake = vae.generate(z, oh).clamp(-1, 1)
-            caminho_arquivo = os.path.join(pasta_classe, f'amostra_{idx:04d}_{categoria.replace(" ", "_")}.png')
-            utils.save_image((fake + 1) / 2, caminho_arquivo)
+
+            # preparar tensor para salvar [0,1]
+            tensor_to_save = (fake + 1) / 2
+            if tensor_to_save.dim() == 4 and tensor_to_save.size(0) == 1:
+                tensor_to_save = tensor_to_save  # tv_utils aceita (N,C,H,W)
+            # montar nome seguro
+            base_name = f"amostra_{idx:04d}_{categoria.replace(' ', '_')}.png"
+            safe_name = _sanitize_filename_windows(base_name, max_len=120)
+
+            # calcula extensão e possivel truncamento extra se o caminho completo for muito longo
+            full_path = os.path.join(dirpath, safe_name)
+            # se caminho total grande, reduz safe_name até caber
+            abs_full = os.path.abspath(full_path)
+            if os.name == "nt" and len(abs_full) > 250:
+                # reduzir safe_name dinamicamente
+                max_total = 240
+                allowed = max_total - len(os.path.abspath(dirpath)) - len(".png") - 1
+                if allowed < 10:
+                    # nome mínimo
+                    safe_name = f"amostra_{idx}.png"
+                else:
+                    # truncar mantendo começo e fim
+                    base_no_ext = os.path.splitext(safe_name)[0]
+                    truncated = base_no_ext[:allowed]
+                    safe_name = truncated + ".png"
+                full_path = os.path.join(dirpath, safe_name)
+
+            # tentativas de salvamento em ordem:
+            save_attempted = False
+            errors_local = []
+
+            # 1) tentativa normal com tv_utils.save_image
+            try:
+                tv_utils.save_image(tensor_to_save, full_path)
+                save_attempted = True
+            except Exception as e1:
+                errors_local.append(("tv_utils", str(e1)))
+
+            # 2) se falhou, tentar com prefixo long path (Windows)
+            if not save_attempted:
+                try:
+                    long_path = _maybe_prefix_long_path(full_path)
+                    tv_utils.save_image(tensor_to_save, long_path)
+                    save_attempted = True
+                except Exception as e2:
+                    errors_local.append(("tv_utils_longpath", str(e2)))
+
+            # 3) fallback: salvar via PIL usando tempfile + os.replace (mais robusto)
+            if not save_attempted:
+                try:
+                    # converte tensor em array HxWxC uint8
+                    t = tensor_to_save.detach().cpu()
+                    if t.dim() == 4 and t.size(0) == 1:
+                        t = t[0]
+                    arr = (t.clamp(0,1).mul(255).byte().permute(1, 2, 0).numpy())
+                    img = Image.fromarray(arr)
+
+                    # salvar em arquivo temporário dentro da mesma pasta
+                    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".png", dir=dirpath)
+                    os.close(tmp_fd)
+                    try:
+                        img.save(tmp_path)
+                        # usar os.replace que é atômico
+                        os.replace(tmp_path, full_path)
+                    finally:
+                        if os.path.exists(tmp_path):
+                            try:
+                                os.remove(tmp_path)
+                            except Exception:
+                                pass
+                    save_attempted = True
+                except Exception as e3:
+                    errors_local.append(("pil_temp", str(e3)))
+
+            if not save_attempted:
+                # todos os métodos falharam: registrar e continuar
+                erros.append((idx, full_path, errors_local))
+                print(f"[AVISO] falha ao salvar amostra {idx}: métodos tentados: {errors_local}")
+                continue
+        except Exception as e_outer:
+            erros.append((idx, None, str(e_outer)))
+            print(f"[AVISO] falha ao gerar/salvar amostra {idx}: {e_outer}")
+            continue
+
+    # resumo
+    if erros:
+        print(f"[RESUMO] {len(erros)} falhas ao gerar/salvar amostras. Exemplos: {erros[:5]}")
+    else:
+        print("[OK] todas amostras geradas com sucesso.")
 
 
 if __name__ == "__main__":
@@ -332,6 +479,11 @@ if __name__ == "__main__":
             resume=True,
             single_class=True
         )
+
+        # salvar no banco de dados
+        db = Database(dbname="sementesdb", user="postgres", password="123")
+
+        db.salvar_checkpoint_vae(categoria, checkpoint, best_model)
 
         # geração de amostras apenas dessa categoria
         gerar_amostras(
