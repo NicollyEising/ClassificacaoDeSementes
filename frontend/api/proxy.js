@@ -1,4 +1,5 @@
 import fetch from "node-fetch";
+import getRawBody from "raw-body";
 
 export const config = { api: { bodyParser: false } };
 
@@ -9,19 +10,25 @@ export default async function handler(req, res) {
   }
 
   try {
+    const buffer = await getRawBody(req);
     const response = await fetch("http://18.216.31.10:8000/processar_imagem", {
       method: "POST",
-      body: req, // encaminha o corpo bruto
+      body: buffer,
       headers: {
         ...req.headers,
-        host: "18.216.31.10:8000" // opcional, para compatibilidade
-      }
+        host: "18.216.31.10",
+      },
     });
 
-    const contentType = response.headers.get("content-type") || "";
-    res.status(response.status);
-    res.setHeader("content-type", contentType);
+    if (!response.ok) {
+      const text = await response.text();
+      console.error("Erro do backend:", text);
+      res.status(response.status).send(text);
+      return;
+    }
 
+    const contentType = response.headers.get("content-type") || "";
+    res.status(response.status).setHeader("content-type", contentType);
     const body = await response.buffer();
     res.send(body);
 
