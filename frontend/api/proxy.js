@@ -1,48 +1,32 @@
 import fetch from "node-fetch";
-import formidable from "formidable";
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+export const config = { api: { bodyParser: false } };
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    res.status(405).json({ error: "Método não permitido" });
+    res.status(405).send("Método não permitido");
     return;
   }
 
-  const form = new formidable.IncomingForm();
-
-  form.parse(req, async (err, fields, files) => {
-    if (err) {
-      res.status(500).json({ error: "Erro ao processar o upload" });
-      return;
-    }
-
-    try {
-      const formData = new FormData();
-
-      if (files.arquivo) {
-        const file = files.arquivo;
-        formData.append("arquivo", await fs.promises.readFile(file.filepath), file.originalFilename);
+  try {
+    const response = await fetch("http://18.216.31.10:8000/processar_imagem", {
+      method: "POST",
+      body: req, // encaminha o corpo bruto
+      headers: {
+        ...req.headers,
+        host: "18.216.31.10:8000" // opcional, para compatibilidade
       }
+    });
 
-      for (const key in fields) {
-        formData.append(key, fields[key]);
-      }
+    const contentType = response.headers.get("content-type") || "";
+    res.status(response.status);
+    res.setHeader("content-type", contentType);
 
-      const response = await fetch("http://18.216.31.10:8000/processar_imagem", {
-        method: "POST",
-        body: formData,
-      });
+    const body = await response.buffer();
+    res.send(body);
 
-      const data = await response.json();
-      res.status(response.status).json(data);
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: "Erro ao encaminhar a requisição para o backend" });
-    }
-  });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Erro ao encaminhar a requisição para o backend");
+  }
 }

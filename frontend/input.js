@@ -19,13 +19,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  const {
-    sidebar,
-    toggleButton,
-    fileInput,
-    fileNameInput,
-    enviarBtn
-  } = elements;
+  const { sidebar, toggleButton, fileInput, fileNameInput, enviarBtn } = elements;
 
   // --- Garantir que os elementos principais existem ---
   if (!toggleButton || !sidebar) {
@@ -86,18 +80,27 @@ document.addEventListener("DOMContentLoaded", () => {
     formData.append("usuario_id", usuarioId);
 
     try {
-      // <-- URL atualizada para usar o proxy do Vercel -->
+      // URL do proxy no Vercel
       const response = await fetch("/api/proxy", {
         method: "POST",
         body: formData
       });
 
       if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.detail || "Erro ao processar imagem");
+        // Tenta extrair o corpo da resposta como texto para mensagens de erro
+        const text = await response.text();
+        throw new Error(text || "Erro ao processar imagem");
       }
 
-      const data = await response.json();
+      // Verifica se a resposta é JSON antes de parsear
+      let data;
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        throw new Error("Resposta do servidor não é JSON: " + text);
+      }
 
       const resultadoDiv = document.getElementById("resultado");
       if (!resultadoDiv) {
