@@ -100,6 +100,7 @@ class LoginResponse(BaseModel):
 
 # Funções auxiliares (do script original, adaptadas)
 
+#conexao com wheader api
 def get_weather(cidade="São Paulo", dias=3):
     url = "https://api.weatherapi.com/v1/forecast.json"
     try:
@@ -115,6 +116,10 @@ def get_weather(cidade="São Paulo", dias=3):
     except requests.exceptions.RequestException as erro:
         raise HTTPException(status_code=500, detail=f"Erro ao consultar clima: {erro}")
 
+# Obtém token de acesso da API Agro via client_credentials
+# - consumer_key e consumer_secret são codificados em Base64
+# - Faz POST em /token para receber access_token
+# - Lança HTTPException em caso de falha
 def get_access_token(consumer_key, consumer_secret):
     credentials = f"{consumer_key}:{consumer_secret}"
     b64_credentials = base64.b64encode(credentials.encode()).decode()
@@ -128,6 +133,13 @@ def get_access_token(consumer_key, consumer_secret):
     else:
         raise HTTPException(status_code=500, detail=f"Erro ao obter token Agro: {response.text}")
 
+
+# Consulta a API RespondeAgro da Embrapa usando template de busca
+# - access_token: token Bearer obtido via get_access_token
+# - query: string de busca
+# - from_record: índice inicial para paginação
+# - size: número de resultados a retornar
+# - Retorna JSON da API ou lança HTTPException em caso de erro
 def consulta_respondeagro(access_token, query, from_record=0, size=10):
     url = "https://api.cnptia.embrapa.br/respondeagro/v1/_search/template"
     headers = {"Authorization": f"Bearer {access_token}"}
@@ -147,6 +159,10 @@ def consulta_respondeagro(access_token, query, from_record=0, size=10):
         raise HTTPException(status_code=500, detail=f"Erro na consulta Agro: {response.text}")
 
 # Classe GradCAM (do script)
+# Implementação de Grad-CAM para visualização de regiões importantes em CNNs
+# - model: modelo PyTorch já treinado
+# - target_layer: camada convolucional alvo para extrair ativações
+# - Retorna mapa de calor normalizado (0-1) da classe de interesse
 class GradCAM:
     def __init__(self, model, target_layer):
         self.model = model
@@ -189,6 +205,11 @@ class GradCAM:
         cam = (cam - cam.min()) / (cam.max() - cam.min() + 1e-8)
         return cam
 
+# Sobreposição de Grad-CAM em imagem BGR
+# - img_bgr: imagem original no formato BGR
+# - cam: mapa de ativação normalizado [0,1]
+# - alpha: transparência do heatmap
+# - Retorna imagem BGR com heatmap sobreposto
 def overlay_cam(img_bgr: np.ndarray, cam: np.ndarray, alpha: float = 0.5) -> np.ndarray:
     """
     img_bgr: imagem no formato BGR (como retornado pelo OpenCV)
@@ -205,7 +226,10 @@ def overlay_cam(img_bgr: np.ndarray, cam: np.ndarray, alpha: float = 0.5) -> np.
     result = cv2.addWeighted(img_bgr, 1.0 - alpha, heatmap_bgr, alpha, 0)
     return result
 
-# Funções de inferência (do script)
+# Inferência com Test-Time Augmentation (TTA)
+# - pil_img: imagem PIL de entrada
+# - USE_TTA: se True, aplica flips horizontais e verticais para TTA
+# - Retorna vetor de probabilidades médio sobre as augmentações
 def infer_tta(pil_img: Image.Image) -> np.ndarray:
     if USE_TTA:
         imgs = [
@@ -226,26 +250,39 @@ def infer_tta(pil_img: Image.Image) -> np.ndarray:
             probs_sum = p if probs_sum is None else probs_sum + p
     return probs_sum / len(imgs)
 
+# Funções auxiliares para inferência e pós-processamento
+
+# Converte imagem BGR do OpenCV para PIL, redimensiona e realiza inferência com TTA
 def infer_whole(frame_bgr: np.ndarray) -> np.ndarray:
     pil = Image.fromarray(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)).resize((IMG_SIZE, IMG_SIZE))
     return infer_tta(pil)
 
+
+# Normaliza vetor via softmax para probabilidades
 def softmax_normalize(v: np.ndarray, eps: float = 1e-9) -> np.ndarray:
     m = np.max(v)
     ex = np.exp(v - m)
     return ex / (np.sum(ex) + eps)
 
+# Retorna top-k classes com suas probabilidades
 def topk_info(probs: np.ndarray, k: int = 3):
     idxs = np.argsort(probs)[::-1][:k]
     return [(class_names[int(i)], float(probs[int(i)])) for i in idxs]
 
+# Retorna índice de uma classe pelo nome, -1 se não existir
 def class_index(name: str) -> int:
     try:
         return class_names.index(name)
     except ValueError:
         return -1
 
-# Processamento principal (adaptado do script para função)
+# Função de processamento completo de uma imagem
+# - Inferência de classe com TTA e segmentação de sementes
+# - Fusão de probabilidades de ROIs e whole image
+# - Pós-processamento de categorias específicas
+# - Anotação da imagem com bbox, texto e Grad-CAM
+# - Consulta clima e recomendações da API Agro
+# - Retorna dicionário compatível com Pydantic ResultadoProcessamento
 def processar_imagem(frame: np.ndarray, cidade: str = "Jaragua do Sul") -> dict:
     # Obter clima
     clima_data = get_weather(cidade, 1)
@@ -572,6 +609,14 @@ def gerar_qrcode_base64(url: str) -> str:
     img_bytes = buffered.getvalue()
     return base64.b64encode(img_bytes).decode("utf-8")
 
+# Endpoint da API para processar uma imagem enviada pelo usuário.
+# - Recebe a imagem via UploadFile e o ID do usuário via Form.
+# - Executa inferência com o modelo VAE/classificador para obter a classe prevista da semente.
+# - Recupera dados climáticos da cidade especificada.
+# - Gera anotações visuais na imagem (bounding boxes, textos e Grad-CAM).
+# - Gera recomendações da API RespondeAgro e integra recomendações inteligentes personalizadas.
+# - Cria URL de detalhes e QR Code para acesso rápido ao resultado.
+# - Salva todas as informações no banco de dados e retorna o resultado em formato JSON.
 @app.post("/processar_imagem", response_model=ResultadoProcessamento)
 async def api_processar_imagem(
     arquivo: UploadFile = File(...),
@@ -631,10 +676,18 @@ async def api_processar_imagem(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Endpoint para obter um resultado previamente salvo pelo ID da semente.
+# - Recupera informações do banco de dados.
+# - Garante que a URL de detalhes e o QR Code estejam presentes.
+# - Converte a imagem armazenada em bytes para base64.
+# - Formata a data/hora em ISO.
+# - Gera recomendações inteligentes adicionais para o usuário.
+# - Retorna o resultado completo em formato JSON.
+from fastapi import Query
+
 @app.get("/resultado/{sement_id}", response_model=dict)
-def obter_resultado(sement_id: int):
+def obter_resultado(sement_id: int, usuario_id: int = Query(...)):
     resultado = db.obter_resultado_por_id(sement_id)
-    usuario_id: int = Form(...)
     if not resultado:
         raise HTTPException(status_code=404, detail="Resultado não encontrado")
 
@@ -643,26 +696,25 @@ def obter_resultado(sement_id: int):
     resultado["qrcode_base64"] = resultado.get("qrcode_base64") or gerar_qrcode_base64(resultado["url_detalhes"])
 
     # Converter bytes para base64
-    img_bytes = resultado.get("img_bytes")
-    if img_bytes:
-        resultado["imagem_anotada_base64"] = base64.b64encode(img_bytes).decode("utf-8")
-    else:
-        resultado["imagem_anotada_base64"] = None
-
-    
+    img_bytes = resultado.get("imagem")
+    resultado["imagem_anotada_base64"] = base64.b64encode(img_bytes).decode("utf-8") if img_bytes else None
 
     resultado["data_hora"] = resultado.get("data_hora").isoformat() if resultado.get("data_hora") else datetime.now().isoformat()
 
-        # --- geração de recomendações inteligentes ---
+    # Geração de recomendações inteligentes
     try:
         recomendacoes = gerar_recomendacoes_smart(resultado, usuario_profile={"usuario_id": usuario_id})
         resultado["recomendacoes"] = recomendacoes
-
     except Exception as e:
-            print("Aviso: erro ao gerar recomendações:", e)
-            resultado["recomendacoes"] = []
+        print("Aviso: erro ao gerar recomendações:", e)
+        resultado["recomendacoes"] = []
+
     return resultado
 
+
+# Endpoint para consulta de clima de uma cidade.
+# - Recebe o nome da cidade como parâmetro de query.
+# - Retorna temperatura, condição climática e chance de chuva do dia atual.
 @app.get("/clima", response_model=ClimaResponse)
 def api_clima(cidade: str = "Jaragua do Sul"):
     clima = get_weather(cidade, 1)
@@ -674,8 +726,9 @@ def api_clima(cidade: str = "Jaragua do Sul"):
     }
 
 
-
-
+# Endpoint para obter recomendações agropecuárias de forma direta para uma classe de sementes.
+# - Recebe o nome da classe como parâmetro de rota.
+# - Consulta a API RespondeAgro usando um token de acesso.
 @app.get("/recomendacoes_agro/{classe}")
 def api_recomendacoes_agro(classe: str):
     # Chamada direta à função de recomendações
@@ -733,6 +786,9 @@ query_variants = {
     ]
 }
 
+# Calcula um fator de risco climático baseado na chance de chuva (0..1).
+# - Entrada: dicionário com chave "chance_chuva".
+# - Saída: float normalizado [0,1], representando risco de impacto climático.
 def clima_risk_factor(clima):
     # Exemplo simples: quanto maior chance_chuva, maior o risco
     try:
@@ -751,6 +807,13 @@ SEVERITY_MAP = {
     "Spotted soybeans": 0.8
 }
 
+# Gera recomendações inteligentes baseadas em:
+# - classe prevista e probabilidade
+# - proporção de área de ROI
+# - fatores climáticos (via clima_risk_factor)
+# - perfil do usuário (opcional)
+# Integra consultas à API RespondeAgro e fallback interno caso não haja resultados.
+# Retorna lista de recomendações estruturadas com score, prioridade e evidências.
 def gerar_recomendacoes_smart(resultado, usuario_profile=None):
     """
     resultado: dict retornado por processar_imagem

@@ -75,7 +75,7 @@
         let backendResponded = false;
   
         try {
-          const res = await fetch('http://127.0.0.1:5000/login', {
+          const res = await fetch('http://18.216.31.10:5000/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -90,7 +90,7 @@
             storage.setItem('usuario_logado', JSON.stringify({ id: json.id, email }));
   
             // Redirecionar após login
-            setTimeout(() => window.location.href = '/frontend/index.html', 1000);
+            setTimeout(() => window.location.href = '/index.html', 1000);
             return;
           } else {
             backendResponded = true;
@@ -143,7 +143,7 @@
       const usuario = localStorage.getItem('usuario_logado') || sessionStorage.getItem('usuario_logado');
       if (isUserLogged(usuario)) {
         console.log('Usuário logado:', JSON.parse(usuario));
-        window.location.href = '/frontend/index.html';
+        window.location.href = '/index.html';
         return;
       } else {
         // Log de debug para confirmar que não há usuário logado

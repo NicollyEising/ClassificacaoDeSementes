@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
     'use strict';
 
-    const backendURL = "http://127.0.0.1:5000";
+    const backendURL = "http://18.216.31.10:5000";
     const usuarioLogado = JSON.parse(localStorage.getItem("usuario_logado"));
     if (!usuarioLogado || !usuarioLogado.id) {
         console.error("Usuário não logado.");
@@ -95,7 +95,7 @@ document.addEventListener("DOMContentLoaded", () => {
     
             // Adiciona redirecionamento ao clicar no item
             item.addEventListener("click", () => {
-                window.location.href = `http://127.0.0.1:5000/frontend/item.html?id=${resultado.id}`;
+                window.location.href = `http://127.0.0.1:5500/frontend/item.html?id=${resultado.id}`;
             });
     
             listaContainer.appendChild(item);

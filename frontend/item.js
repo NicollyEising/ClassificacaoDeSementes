@@ -1,8 +1,8 @@
 document.addEventListener("DOMContentLoaded", () => {
   'use strict';
 
-  const backendURL = "http://127.0.0.1:8000"; // Porta 8000 para dados
-  const imagensURL = "http://127.0.0.1:5000";  // Porta 5000 para imagens
+  const backendURL = "http://18.216.31.10:8000"; // Porta 8000 para dados
+  const imagensURL = "http://18.216.31.10:5000";  // Porta 5000 para imagens
 
   const urlParams = new URLSearchParams(window.location.search);
   const itemId = urlParams.get("id");

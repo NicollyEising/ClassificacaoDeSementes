@@ -37,7 +37,8 @@ categorias = [
     "Spotted soybeans"
 ]
 
-# ------------------- Bloco residual up -----------------
+# Bloco residual de upsampling: aumenta a resolução do tensor de entrada em 2x, aplica duas convoluções com BatchNorm e ReLU, 
+# e soma com um atalho (skip connection) também upsampled, preservando informações da entrada original.
 class ResBlockUp(nn.Module):
     def __init__(self, in_ch, out_ch):
         super().__init__()
@@ -55,7 +56,12 @@ class ResBlockUp(nn.Module):
         skip = self.up(self.skip(x))
         return out + skip
 
-# ------------------------- VAE -------------------------
+# Variational Autoencoder (VAE) com condicionamento de classe:
+# - Encoder: várias convoluções com downsampling para extrair representações compactas da imagem.
+# - Projeção para média (mu) e log-variância (lv) do espaço latente.
+# - Reparametrização para amostragem diferenciável do vetor latente.
+# - Decodificador: aumenta progressivamente a resolução usando blocos residuais de upsampling, reconstruindo a imagem.
+# - Suporta geração condicional combinando o vetor latente com codificação one-hot da classe.
 class VAE(nn.Module):
     def __init__(self, z_dim, n_cls):
         super().__init__()
@@ -102,7 +108,11 @@ class VAE(nn.Module):
         out = self.decoder(f)
         return out
 
-# -------------------- Discriminador --------------------
+# Discriminador de GAN:
+# - Convoluções com downsampling e normalização espectral para estabilizar o treinamento.
+# - LeakyReLU como função de ativação.
+# - Global Average Pooling para reduzir a dimensão espacial a um vetor de características.
+# - Camada linear com normalização espectral para produzir a saída de real/falso.
 class D(nn.Module):
     def __init__(self):
         super().__init__()
@@ -122,27 +132,39 @@ class D(nn.Module):
         x = self.gap(x).view(x.size(0), -1)
         return self.fc(x)
 
-# ---------------------- Perdas -------------------------
+
+# Funções de perda e utilitários:
+
+# LPIPS: métrica de similaridade perceptual entre imagens.
 lpips_loss = lpips.LPIPS(net='vgg').to(DEVICE)
 
+# Divergência KL para VAE: força a distribuição latente a se aproximar de uma normal padrão.
 def kld(mu, lv):
     return -0.5 * torch.mean(1 + lv - mu.pow(2) - lv.exp())
 
+# Penalidade R1 para o discriminador: regulariza gradientes em imagens reais, estabilizando treinamento de GANs.
 def r1_penalty(discriminator, real):
     real_req = real.detach().requires_grad_(True)
     pred     = discriminator(real_req).sum()
     grad     = torch.autograd.grad(pred, real_req, create_graph=True)[0]
     return grad.view(real_req.size(0), -1).pow(2).sum(1).mean()
 
+# Carrega um classificador pré-treinado (ResNet18) para compatibilidade ou avaliação de classes.
 def load_classifier():
-    # função mantida para compatibilidade; pode ser removida se não utilizada
     model = models.resnet18(pretrained=True)
     model.fc = nn.Linear(model.fc.in_features, len(categorias))
     model = model.to(DEVICE)
     model.eval()
     return model
 
-
+# Função de treinamento do VAE condicional com discriminadores:
+# - Suporta treinamento single-class ou multi-class.
+# - Aplica augmentações de imagem e normalização.
+# - Implementa loop de treinamento com:
+#     • Forward do VAE para reconstrução e amostragem latente.
+#     • Atualização de discriminadores com penalidade R1.
+#     • Cálculo da loss do gerador combinando reconstrução (L1 + LPIPS), KLD e adversarial (quando aplicável).
+# - Salva checkpoints periódicos e mantém o melhor modelo com base na loss do gerador.
 def train(data_dir, checkpoint_path="checkpoint.pth", best_model_path="best_model_vae.pth", seed: int = 0, resume: bool = False, single_class: bool = True):
     """Treina um VAE (possivelmente em modo single-class).
 
@@ -294,6 +316,13 @@ from pathlib import Path
 from torchvision import utils as tv_utils
 from PIL import Image
 
+
+# Sanitiza nomes de arquivos para Windows:
+# - Normaliza caracteres Unicode (NFKC).
+# - Remove caracteres de controle e DEL.
+# - Substitui caracteres proibidos <>:"/\|?* por underscore.
+# - Remove pontos e espaços finais e reduz múltiplos underscores.
+# - Limita comprimento a max_len e retorna "file" se vazio.
 def _sanitize_filename_windows(name: str, max_len: int = 150) -> str:
     """
     Limpeza agressiva para Windows:
@@ -323,6 +352,9 @@ def _sanitize_filename_windows(name: str, max_len: int = 150) -> str:
         name = name[:max_len]
     return name or "file"
 
+# Adiciona prefixo de caminho longo no Windows:
+# - Para caminhos absolutos com mais de ~250 caracteres, adiciona '\\?\' para permitir long paths.
+# - Em outros sistemas, retorna o caminho original.
 def _maybe_prefix_long_path(path_str: str) -> str:
     """
     Se for Windows e comprimento > ~250, adiciona prefixo \\?\ para suportar long paths.
@@ -336,6 +368,12 @@ def _maybe_prefix_long_path(path_str: str) -> str:
     else:
         return path_str
 
+# Gera amostras a partir de um checkpoint VAE, com robustez para Windows:
+# - Sanitiza nomes de arquivos.
+# - Trata long paths com prefixo \\?\ quando necessário.
+# - Salva usando tv_utils ou fallback via PIL + tempfile + os.replace.
+# - Permite retomar a geração a partir de start_idx.
+# - Registra falhas sem interromper o loop.
 def gerar_amostras(peso_arquivo, pasta_saida, categoria, num_imgs=100, seed: int = 0, start_idx: int = 0):
     """
     Gera amostras a partir de um checkpoint VAE, versão robusta para Windows:
@@ -459,16 +497,19 @@ def gerar_amostras(peso_arquivo, pasta_saida, categoria, num_imgs=100, seed: int
 
 
 if __name__ == "__main__":
-    base_dir = r"C:\Users\faculdade\.cache\kagglehub\datasets\warcoder\soyabean-seeds\versions\2\Soybean Seeds"
+    base_dir = "/tmp/bucket_files/Soybean Seeds"
+
 
     for categoria in categorias:
         print(f"\n--- Treinando categoria isolada: {categoria} ---")
 
         data_dir = os.path.join(base_dir, categoria)
 
-        checkpoint = f"checkpoint_{categoria.replace(' ', '_')}.pth"
-        best_model = f"best_model_vae_{categoria.replace(' ', '_')}.pth"
-        pasta_amostras = os.path.join("amostras", categoria.replace(" ", "_"))
+        checkpoint = os.path.join("/tmp/bucket_files", f"checkpoint_{categoria.replace(' ', '_')}.pth")
+        best_model = os.path.join("/tmp/bucket_files", f"best_model_vae_{categoria.replace(' ', '_')}.pth")
+
+        pasta_amostras = os.path.join("/tmp/bucket_files/amostras", categoria.replace(" ", "_"))
+
 
         # treino do zero para a categoria atual (single_class=True)
         train(
