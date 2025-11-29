@@ -86,7 +86,8 @@ document.addEventListener("DOMContentLoaded", () => {
     formData.append("usuario_id", usuarioId);
 
     try {
-      const response = await fetch("http://18.216.31.10:8000/processar_imagem", {
+      // <-- URL atualizada para usar o proxy do Vercel -->
+      const response = await fetch("/api/proxy", {
         method: "POST",
         body: formData
       });
