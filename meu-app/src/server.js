@@ -1,63 +1,32 @@
 // server.js
 const express = require('express');
 const path = require('path');
-const morgan = require('morgan');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
-app.use(morgan('dev'));
 
-// ---- CORS ----
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*'); 
-  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
-  next();
-});
+// Serve os arquivos do build do React
+app.use(express.static(path.join(__dirname, 'build')));
 
-// ---- PROXIES ----
-// Proxy backend 5000
-app.use('/api5000', createProxyMiddleware({
+// Proxy para backend 5000
+app.use('/api', createProxyMiddleware({
   target: 'http://18.216.31.10:5000',
   changeOrigin: true,
-  secure: false,
-  logLevel: 'debug',
-  pathRewrite: { '^/api5000': '' },
-  onError: (err, req, res) => {
-    console.error('Proxy /api5000 error:', err?.message || err);
-    if (!res.headersSent) res.status(502).json({ error: 'Bad gateway (api5000)', details: String(err) });
-    else res.end();
-  }
+  pathRewrite: { '^/api': '' }
 }));
 
-// Proxy backend 8000 (para uploads e JSON)
+// Proxy para backend 8000
 app.use('/api8000', createProxyMiddleware({
   target: 'http://18.216.31.10:8000',
   changeOrigin: true,
-  secure: false,
-  logLevel: 'debug',
-  pathRewrite: { '^/api8000': '' },
-  onError: (err, req, res) => {
-    console.error('Proxy /api8000 error:', err?.message || err);
-    if (!res.headersSent) res.status(502).json({ error: 'Bad gateway (api8000)', details: String(err) });
-    else res.end();
-  },
-  // IMPORTANTE: permite enviar arquivos sem quebrar stream
-  selfHandleResponse: false
+  pathRewrite: { '^/api8000': '' }
 }));
 
-// ---- Serve React build ----
-const buildDir = path.join(__dirname, 'build');
-app.use(express.static(buildDir));
+// Todas as outras rotas servem o React
 app.get('*', (req, res) => {
-  res.sendFile(path.join(buildDir, 'index.html'));
+  res.sendFile(path.join(__dirname, 'build', 'index.html'));
 });
 
-// ---- Start server ----
+// Porta do servidor
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
-  console.log(`Proxying /api5000 -> http://18.216.31.10:5000`);
-  console.log(`Proxying /api8000 -> http://18.216.31.10:8000`);
-});
+app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
