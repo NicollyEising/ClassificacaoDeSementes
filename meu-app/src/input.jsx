@@ -96,23 +96,22 @@ function Input() {
       formData.append('usuario_id', usuarioId);
 
       try {
-        const response = await fetch('/api/processar_imagem/', {
-            method: 'POST',
-            body: formData
-          });
-  
-          // Lê a resposta apenas uma vez
-          const data = await response.json().catch(async () => {
-            const text = await response.text();
-            throw new Error(`Resposta inválida do servidor: ${text}`);
-          });
-  
-          if (!response.ok) {
-            throw new Error(data.detail || 'Erro ao processar imagem');
-          }
-  
-          const resultadoDiv = document.getElementById('resultado');
-          if (!resultadoDiv) return;
+        const response = await fetch('/api8000/processar_imagem', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.detail || 'Erro ao processar imagem');
+        }
+
+        const data = await response.json();
+        const resultadoDiv = document.getElementById('resultado');
+        if (!resultadoDiv) {
+          console.error("Elemento 'resultado' não encontrado.");
+          return;
+        }
 
         resultadoDiv.classList.remove('hidden');
         resultadoDiv.innerHTML = `
@@ -256,4 +255,3 @@ function Input() {
 }
 
 export default Input;
-
