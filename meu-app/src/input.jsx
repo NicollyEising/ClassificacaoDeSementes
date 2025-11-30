@@ -101,30 +101,17 @@ function Input() {
           body: formData
         });
 
-      if (!response.ok) {
-        let errMsg = 'Erro ao processar imagem';
-        try {
-          const errData = await response.json();
-          errMsg = errData.detail || errMsg;
-        } catch(e) {
-          errMsg = await response.text(); // fallback
+        const data = await response.json().catch(async () => {
+          const text = await response.text();
+          throw new Error(`Resposta inválida do servidor: ${text}`);
+        });
+
+        if (!response.ok) {
+          throw new Error(data.detail || 'Erro ao processar imagem');
         }
-        throw new Error(errMsg);
-      }
-      
-      let data;
-      try {
-        data = await response.json();
-      } catch(e) {
-        const text = await response.text();
-        throw new Error(`Resposta inválida do servidor: ${text}`);
-      }
 
         const resultadoDiv = document.getElementById('resultado');
-        if (!resultadoDiv) {
-          console.error("Elemento 'resultado' não encontrado.");
-          return;
-        }
+        if (!resultadoDiv) return;
 
         resultadoDiv.classList.remove('hidden');
         resultadoDiv.innerHTML = `
@@ -268,5 +255,6 @@ function Input() {
 }
 
 export default Input;
+
 
 
