@@ -11,7 +11,7 @@ function MeuComponente() {
   const [secaoAtiva, setSecaoAtiva] = useState('rails');
   const [sidebarHidden, setSidebarHidden] = useState(false);
   const [resultadosDefeitos, setResultadosDefeitos] = useState([]);
-  const backendURL = "http://18.216.31.10:5000";
+  const backendURL = "/api";
   const [chartData, setChartData] = useState({
     series: [],
     options: {}
