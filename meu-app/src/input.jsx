@@ -101,6 +101,7 @@ function Input() {
           body: formData
         });
 
+        // Lê a resposta apenas uma vez
         const data = await response.json().catch(async () => {
           const text = await response.text();
           throw new Error(`Resposta inválida do servidor: ${text}`);
@@ -255,6 +256,7 @@ function Input() {
 }
 
 export default Input;
+
 
 
 
