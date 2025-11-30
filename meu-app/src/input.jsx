@@ -96,7 +96,7 @@ function Input() {
       formData.append('usuario_id', usuarioId);
 
       try {
-        const response = await fetch('http://api8000/processar_imagem', {
+        const response = await fetch('/api8000/processar_imagem', {
           method: 'POST',
           body: formData
         });
@@ -268,4 +268,5 @@ function Input() {
 }
 
 export default Input;
+
 
