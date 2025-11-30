@@ -16,12 +16,21 @@ app.use('/api', createProxyMiddleware({
 }));
 
 // Proxy para backend 8000
+const { createProxyMiddleware } = require('http-proxy-middleware');
+
 app.use('/api8000', createProxyMiddleware({
   target: 'http://18.216.31.10:8000',
   changeOrigin: true,
-  pathRewrite: { '^/api8000': '' }
+  pathRewrite: { '^/api8000': '' },
+  onProxyReq: (proxyReq, req, res) => {
+    // se houver body (FormData), encaminha corretamente
+    if (req.body) {
+      const bodyData = req.body;
+      proxyReq.write(bodyData);
+      proxyReq.end();
+    }
+  }
 }));
-
 // Todas as outras rotas servem o React
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'build', 'index.html'));
@@ -30,3 +39,4 @@ app.get('*', (req, res) => {
 // Porta do servidor
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
+
