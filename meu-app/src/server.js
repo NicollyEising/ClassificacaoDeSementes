@@ -16,7 +16,6 @@ app.use('/api', createProxyMiddleware({
 }));
 
 // Proxy para backend 8000
-const { createProxyMiddleware } = require('http-proxy-middleware');
 
 app.use('/api8000', createProxyMiddleware({
   target: 'http://18.216.31.10:8000',
@@ -39,4 +38,5 @@ app.get('*', (req, res) => {
 // Porta do servidor
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
+
 
