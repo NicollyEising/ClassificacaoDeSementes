@@ -101,12 +101,25 @@ function Input() {
           body: formData
         });
 
-        if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.detail || 'Erro ao processar imagem');
+      if (!response.ok) {
+        let errMsg = 'Erro ao processar imagem';
+        try {
+          const errData = await response.json();
+          errMsg = errData.detail || errMsg;
+        } catch(e) {
+          errMsg = await response.text(); // fallback
         }
+        throw new Error(errMsg);
+      }
+      
+      let data;
+      try {
+        data = await response.json();
+      } catch(e) {
+        const text = await response.text();
+        throw new Error(`Resposta inválida do servidor: ${text}`);
+      }
 
-        const data = await response.json();
         const resultadoDiv = document.getElementById('resultado');
         if (!resultadoDiv) {
           console.error("Elemento 'resultado' não encontrado.");
@@ -255,3 +268,4 @@ function Input() {
 }
 
 export default Input;
+
