@@ -1,26 +1,50 @@
-import { PassThrough } from 'stream';
+import { NextResponse } from 'next/server';
+import formidable from 'formidable';
+import fs from 'fs';
 
 export const config = {
   api: {
-    bodyParser: false, // importante para FormData
-    sizeLimit: '10mb',
+    bodyParser: false, // necessário para receber arquivos via FormData
   },
 };
 
-export default async function handler(req, res) {
-  const url = `http://18.216.31.10:8000${req.url.replace('/api/proxy8000', '')}`;
+export const POST = async (req) => {
+  try {
+    const form = formidable({ multiples: false });
 
-  const headers = { ...req.headers };
-  delete headers.host;
+    const data = await new Promise((resolve, reject) => {
+      form.parse(req, (err, fields, files) => {
+        if (err) return reject(err);
+        resolve({ fields, files });
+      });
+    });
 
-  const response = await fetch(url, {
-    method: req.method,
-    headers,
-    body: req.method !== 'GET' && req.method !== 'HEAD' ? req : undefined,
-  });
+    const { fields, files } = data;
+    const arquivo = files.arquivo;
+    const cidade = fields.cidade;
+    const usuario_id = fields.usuario_id;
 
-  const contentType = response.headers.get('content-type') || 'application/json';
-  res.status(response.status).setHeader('Content-Type', contentType);
+    if (!arquivo) {
+      return NextResponse.json({ detail: 'Nenhum arquivo enviado' }, { status: 400 });
+    }
 
-  response.body.pipe(res);
-}
+    // Lê o arquivo em buffer e converte para Base64
+    const fileBuffer = fs.readFileSync(arquivo.filepath);
+    const imagemBase64 = fileBuffer.toString('base64');
+
+    // Retorna exatamente o que veio do frontend
+    return NextResponse.json({
+      usuario_id,
+      cidade,
+      nome_arquivo: arquivo.originalFilename,
+      imagem_base64: imagemBase64,
+    }, { status: 200 });
+
+  } catch (err) {
+    return NextResponse.json({ detail: err.message }, { status: 500 });
+  }
+};
+
+export const GET = async () => {
+  return NextResponse.json({ detail: 'Method Not Allowed' }, { status: 405 });
+};
