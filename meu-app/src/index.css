@@ -1,0 +1,70 @@
+.ui.grid.equal-height {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.ui.grid.equal-height > .column {
+  display: flex;
+  flex-direction: column;
+}
+
+.ui.grid.equal-height > .column > .ui.segment {
+  flex: 1;
+}
+
+    /* Sidebar fixo */
+    #sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 250px;
+  height: 100vh;
+  padding-top: 1rem;
+  transition: transform 0.3s ease;
+  z-index: 1000;
+}
+
+/* Ajuste da área principal */
+.main-column {
+  margin-left: 260px;
+  padding: 2rem;
+  transition: margin-left 0.3s ease;
+}
+
+/* Botão fixo de abrir/fechar */
+#sidebar-toggle {
+  position: fixed;
+  top: 20px;
+  left: 230px;
+  z-index: 1100;
+  transition: left 0.3s ease;
+  background: white;
+  border: 1px solid #ddd;
+}
+
+/* Quando a sidebar estiver oculta */
+#sidebar.hidden {
+  transform: translateX(-100%);
+}
+
+#sidebar.hidden + #sidebar-toggle {
+  left: 20px;
+}
+
+#sidebar.hidden ~ .main-column {
+  margin-left: 60px;
+}
+
+#Defeitos {
+width: 100%;
+max-width: 85%;
+margin-top: 2rem;
+}
+
+#Defeitos .ui.grid {
+width: 100%;
+}
+
+#Defeitos .ui.segment {
+width: 100%;
+}

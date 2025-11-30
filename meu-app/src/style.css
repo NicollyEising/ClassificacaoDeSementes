@@ -1,0 +1,432 @@
+/* Tipografia base */
+body,
+.content,
+.ui.segment,
+.ui.list .item,
+.todosD,
+.description,
+h3,
+.lista a {
+  font-size: 0.875rem !important; /* 14px */
+  line-height: 1.4;
+  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color: #333;
+}
+
+body {
+  background-color: #f1f8f4; /* Fundo verde suave */
+  font-family: 'Inter', 'Segoe UI', Roboto, sans-serif;
+  padding: 1rem;
+  color: #222;
+}
+
+.teste{
+  display: block!important;
+}
+
+/* Cabeçalhos */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  color: #222;
+  line-height: 1.2;
+}
+
+.profile-content .ui.sub.header {
+  margin-bottom: 2px; /* reduz a margem inferior do título */
+}
+
+.profile-content {
+  line-height: 0.2; /* ajusta o espaçamento entre linhas */
+}
+
+h3 {
+  font-size: 0.875rem !important; /* alinhado com a barra lateral */
+}
+
+/* Links */
+a {
+  color: #4183c4;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Texto descritivo */
+.description {
+  color: #555;
+}
+
+/* Menu lateral */
+.ui.vertical.menu .header {
+  font-size: 0.875rem; /* 14px */
+  font-weight: 700;
+  margin-bottom: 0.5em;
+  color: #222;
+}
+
+/* Nome e cargo do perfil */
+.profile-bottom .ui.sub.header {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #222;
+}
+
+.profile-bottom .content {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+/* Estilo geral */
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+.ui.grid {
+  height: 100vh;
+  margin: 0;
+}
+
+.horizontal {
+  display: flex !important;
+}
+
+/* Estilo da coluna lateral */
+.sidebar-column {
+  width: 250px;
+  min-width: 250px;
+  max-width: 250px;
+  transition: all 0.4s ease;
+  overflow: hidden;
+}
+
+.sidebar-column.collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+}
+
+.todosD {
+  position: absolute;
+  bottom: -15px; /* distância do fundo do segment */
+  left: 10px;   /* opcional: distância da borda esquerda */
+  right: 10px;  /* opcional: para que ocupe a largura */
+  display: flex;
+  justify-content: flex-start; /* ou center, se desejar centralizado */
+}
+
+/* Oculta o conteúdo do menu visualmente */
+.sidebar-column.collapsed #menu {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Estilo do menu lateral */
+#menu {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  justify-content: space-between;
+  transition: opacity 0.3s ease;
+}
+
+.collapsed #menu {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hidden-menu {
+  display: none !important;
+}
+
+/* Menu superior e inferior */
+.menu-top {
+  flex-grow: 1;
+}
+
+.menu-bottom {
+  padding-bottom: 1rem;
+}
+
+/* Layout vertical total */
+.full-height {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+/* Espaçamento entre itens do menu */
+.ui.vertical.menu .item:not(.profile-bottom) {
+  margin-bottom: 1.5em;
+}
+
+/* Espaçamento interno de submenus */
+.ui.vertical.menu .item .menu .item {
+  margin-top: 1em;
+}
+
+/* Perfil fixado no rodapé */
+.profile-bottom {
+  margin-top: auto;
+  padding-top: 2em;
+}
+
+/* Perfil em linha (imagem + texto) */
+.profile-bottom .item.horizontal {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+}
+
+/* Espaço do header dentro de perfil horizontal */
+.horizontal .header {
+  margin-top: 5px !important;
+}
+
+/* Seção de conteúdo oculta inicialmente */
+.content-section {
+  display: none;
+  padding: 1em;
+}
+
+/* Classe utilitária */
+.lw {
+  font-size: 60px;
+}
+
+/* Botão de alternância da barra lateral */
+#toggleMenu {
+  margin-bottom: 1em;
+}
+
+.ui.grid .column .ui.grid {
+  height: auto !important;
+}
+
+.rounded {
+  border-radius: 20px !important;
+  padding: 1em;
+}
+
+.lista {
+  display: flex !important;
+  padding: 15px 15px !important;
+  border-radius: 12px;
+  cursor: pointer;
+  align-items: center !important;
+}
+
+.lista:hover {
+  background-color: #d2f3df;
+}
+
+.content {
+  margin-left: 1em;
+}
+
+h3 {
+  margin-left: 15px;
+  padding: 10px 10px 0 10px;
+  font-weight: 600;
+  font-size: 1.18em!important;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start; /* alinhamento inicial */
+}
+
+h3 span {
+  margin-left: auto;
+  cursor: pointer; /* opcional, para indicar interatividade */
+  display: flex;
+  align-items: center;
+  gap: 0.3em; /* espaço entre texto e ícone */
+  font-weight: 500;
+  font-size: 0.88em;
+  color: #6a6a6a;
+}
+
+img {
+  width: 40px;
+  height: 35px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.lista a {
+  text-decoration: none;
+  color: black;
+  font-weight: 500;
+  font-size: 0.875rem !important;
+}
+
+a{
+  text-decoration: none!important;
+}
+
+.todosD {
+  margin-left: 15px;
+  margin-top: 30px !important;
+  margin-bottom: 30px !important;
+  color: rgb(110, 86, 56);
+  font-weight: 500;
+  font-size: 0.875rem !important;
+}
+
+.todosD:hover {
+  color: rgb(110, 86, 56);
+}
+
+.text{
+  font-size: 0.875rem !important;
+  color: #6a6a6a;
+}
+
+.menu .item{
+  font-size: 0.875rem !important;
+}
+
+.titulo{
+  font-size: 1.2rem !important;
+  font-weight: 600;
+  color: #222;
+  margin-bottom: 1em;
+}
+
+.titulo1{
+
+  height: 110%; /* ajuste a altura para o valor desejado */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.titulo2{
+font-size: 1.4rem !important;
+  font-weight: 600;
+  color: #222;
+  margin-bottom: 0.5em;
+}
+
+.mes{
+  margin-bottom: -20px;
+  color: saddlebrown;
+}
+
+.ano{
+  color: rgb(55, 208, 75);
+}
+
+.crescimento{
+  color: rgb(91, 91, 91);
+}
+
+.mes img{
+  height: 29px;
+}
+
+.center{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+
+.qrcodetitulo{
+  font-size: 2.5rem !important;
+  margin: 30px 0 20px 0;
+}
+
+.items-center h2{
+  margin-top: 1em;
+  font-size: 1.2rem !important;
+}
+
+@media screen and (max-width: 768px) {
+  .lista {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    padding: 1em !important;
+  }
+
+  .lista img {
+    width: 100%;
+    height: auto;
+    max-width: 100px;
+    margin-bottom: 0.5em;
+  }
+
+  .lista .content {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .todosD {
+    display: block;
+    text-align: center;
+    margin-top: 1.5em !important;
+  }
+
+  .ui.grid.equal-height,
+  .ui.grid {
+    flex-direction: column !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .ui.grid.equal-height > .column,
+  .ui.grid > .column,
+  .ui.three.column.grid > .column {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: 0 0 100% !important;
+    margin-bottom: 1em;
+  }
+
+  .ui.segment {
+    padding: 1em !important;
+    margin-bottom: 1em !important;
+  }
+
+  /* Faz a coluna principal ocupar 100% */
+  .twelve.wide.column {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  /* Ajusta o botão para grudar à esquerda */
+  #toggleMenu {
+    margin-left: 0 !important;
+  }
+}
+
+.sidebar-column {
+  height: 100vh; /* altura total da tela */
+  min-height: 600px; /* altura mínima opcional */
+}
+
+/* Menu vertical com altura fixa */
+.ui.vertical.menu.full-height {
+  height: 100%; /* ocupa toda a coluna */
+  overflow-y: auto; /* rolagem se exceder altura */
+}
+
+/* Mantendo estrutura de colunas flexíveis */
+.ui.grid.equal-height {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.ui.grid.equal-height > .column {
+  display: flex;
+  flex-direction: column;
+}
+
+.ui.grid.equal-height > .column > .ui.segment {
+  flex: 1;
+}
+
+/* Opcional: manter perfil no fundo */
+.profile-bottom {
+  margin-top: auto;
+}
