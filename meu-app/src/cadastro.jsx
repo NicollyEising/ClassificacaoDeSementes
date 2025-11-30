@@ -76,7 +76,7 @@ function Cadastro() {
 
     try {
       const payload = { email, senha };
-      const res = await fetch('http://18.216.31.10:5000/cadastrar', {
+      const res = await fetch('/api/cadastrar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
