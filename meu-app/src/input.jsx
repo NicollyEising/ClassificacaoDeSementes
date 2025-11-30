@@ -96,20 +96,17 @@ function Input() {
       formData.append('usuario_id', usuarioId);
 
       try {
-        const response = await fetch('/api8000/processar_imagem', {
-            method: 'POST',
-            body: formData,
-          });
-          
-          const raw = await response.text();
-          console.log("RAW RESPONSE:", raw);
-          
-          let data;
-          try {
-            data = JSON.parse(raw);
-          } catch {
-            throw new Error("Resposta não é JSON válido");
-          }
+        const response = await fetch('http://18.216.31.10:8000/processar_imagem', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.detail || 'Erro ao processar imagem');
+        }
+
+        const data = await response.json();
         const resultadoDiv = document.getElementById('resultado');
         if (!resultadoDiv) {
           console.error("Elemento 'resultado' não encontrado.");

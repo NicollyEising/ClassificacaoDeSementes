@@ -15,8 +15,8 @@ function Item() {
   const [sidebarHidden, setSidebarHidden] = useState(false);
   
 
-  const backendURL = "/api8000";
-  const imagensURL = "/api";
+  const backendURL = "http://18.216.31.10:8000";
+  const imagensURL = "http://18.216.31.10:5000";
 
   const toggleSidebar = () => setSidebarAberto(!sidebarAberto);
 
