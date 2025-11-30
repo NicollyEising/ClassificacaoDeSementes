@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import './index.css';
 import './style.css';
-import axios from 'axios';
-
 
 function Input() {
   const navigate = useNavigate();
@@ -74,58 +72,63 @@ function Input() {
 
     if (fileInput) fileInput.addEventListener('change', fileChangeHandler);
 
+    const enviarHandler = async () => {
+      const cidadeInput = document.getElementById('cidade');
+      const cidade = cidadeInput ? cidadeInput.value || 'Jaragua do Sul' : 'Jaragua do Sul';
 
-// Dentro do enviarHandler
-const enviarHandler = async () => {
-  const cidadeInput = document.getElementById('cidade');
-  const cidade = cidadeInput ? cidadeInput.value || 'Jaragua do Sul' : 'Jaragua do Sul';
+      if (!fileInput || !fileInput.files.length) {
+        alert('Selecione uma imagem');
+        return;
+      }
 
-  if (!fileInput || !fileInput.files.length) {
-    alert('Selecione uma imagem');
-    return;
-  }
+      const usuarioData = localStorage.getItem('usuario_logado');
+      if (!usuarioData) {
+        alert('Usuário não encontrado no localStorage');
+        return;
+      }
 
-  const usuarioData = localStorage.getItem('usuario_logado');
-  if (!usuarioData) {
-    alert('Usuário não encontrado no localStorage');
-    return;
-  }
+      const usuario = JSON.parse(usuarioData);
+      const usuarioId = usuario.id;
 
-  const usuario = JSON.parse(usuarioData);
-  const usuarioId = usuario.id;
+      const formData = new FormData();
+      formData.append('arquivo', fileInput.files[0]);
+      formData.append('cidade', cidade);
+      formData.append('usuario_id', usuarioId);
 
-  const formData = new FormData();
-  formData.append('arquivo', fileInput.files[0]);
-  formData.append('cidade', cidade);
-  formData.append('usuario_id', usuarioId);
+      try {
+        const response = await fetch('/api8000/processar_imagem', {
+          method: 'POST',
+          body: formData
+        });
 
-  try {
-    const response = await axios.post('/api8000/processar_imagem', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.detail || 'Erro ao processar imagem');
+        }
 
-      const data = response.data;
-      const resultadoDiv = document.getElementById('resultado');
-      if (!resultadoDiv) return;
+        const data = await response.json();
+        const resultadoDiv = document.getElementById('resultado');
+        if (!resultadoDiv) {
+          console.error("Elemento 'resultado' não encontrado.");
+          return;
+        }
 
-      resultadoDiv.classList.remove('hidden');
-      resultadoDiv.innerHTML = `
-        <p><strong>Classe prevista:</strong> ${data.classe_prevista}</p>
-        <p><strong>Probabilidade:</strong> ${data.probabilidade}</p>
-        <p><strong>Cidade:</strong> ${data.clima.cidade}</p>
-        <p><strong>Temperatura:</strong> ${data.clima.temperatura}°C</p>
-        <p><strong>Condição:</strong> ${data.clima.condicao}</p>
-        <p><strong>Chance de chuva:</strong> ${data.clima.chance_chuva}%</p>
-        <img src="data:image/png;base64,${data.imagem_anotada_base64}"
-             alt="Imagem Anotada"
-             style="max-width:400px; margin-top:1rem;"/>
-      `;
-    } catch (error) {
-      console.error(error);
-      alert(error.response?.data?.detail || error.message || 'Erro ao processar imagem');
-    }
-  };
-
+        resultadoDiv.classList.remove('hidden');
+        resultadoDiv.innerHTML = `
+          <p><strong>Classe prevista:</strong> ${data.classe_prevista}</p>
+          <p><strong>Probabilidade:</strong> ${data.probabilidade}</p>
+          <p><strong>Cidade:</strong> ${data.clima.cidade}</p>
+          <p><strong>Temperatura:</strong> ${data.clima.temperatura}°C</p>
+          <p><strong>Condição:</strong> ${data.clima.condicao}</p>
+          <p><strong>Chance de chuva:</strong> ${data.clima.chance_chuva}%</p>
+          <img src="data:image/png;base64,${data.imagem_anotada_base64}"
+               alt="Imagem Anotada"
+               style="max-width:400px; margin-top:1rem;"/>
+        `;
+      } catch (error) {
+        alert(error.message);
+      }
+    };
 
     if (enviarBtn) enviarBtn.addEventListener('click', enviarHandler);
 
