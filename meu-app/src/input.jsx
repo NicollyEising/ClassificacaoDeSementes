@@ -96,7 +96,7 @@ function Input() {
       formData.append('usuario_id', usuarioId);
 
       try {
-        const response = await fetch('/api8000/processar_imagem', {
+        const response = await fetch('http://api8000/processar_imagem', {
           method: 'POST',
           body: formData
         });
@@ -106,41 +106,29 @@ function Input() {
           throw new Error(err.detail || 'Erro ao processar imagem');
         }
 
-      // Lê a resposta como texto primeiro
-      const text = await response.text();
-      if (!text) {
-        throw new Error('Resposta vazia do servidor');
+        const data = await response.json();
+        const resultadoDiv = document.getElementById('resultado');
+        if (!resultadoDiv) {
+          console.error("Elemento 'resultado' não encontrado.");
+          return;
+        }
+
+        resultadoDiv.classList.remove('hidden');
+        resultadoDiv.innerHTML = `
+          <p><strong>Classe prevista:</strong> ${data.classe_prevista}</p>
+          <p><strong>Probabilidade:</strong> ${data.probabilidade}</p>
+          <p><strong>Cidade:</strong> ${data.clima.cidade}</p>
+          <p><strong>Temperatura:</strong> ${data.clima.temperatura}°C</p>
+          <p><strong>Condição:</strong> ${data.clima.condicao}</p>
+          <p><strong>Chance de chuva:</strong> ${data.clima.chance_chuva}%</p>
+          <img src="data:image/png;base64,${data.imagem_anotada_base64}"
+               alt="Imagem Anotada"
+               style="max-width:400px; margin-top:1rem;"/>
+        `;
+      } catch (error) {
+        alert(error.message);
       }
-
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        console.error('Erro ao parsear JSON:', text);
-        throw new Error('Resposta inválida do servidor');
-      }
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Erro ao processar imagem');
-      }
-
-      const resultadoDiv = document.getElementById('resultado');
-      if (!resultadoDiv) return;
-
-      resultadoDiv.classList.remove('hidden');
-      resultadoDiv.innerHTML = `
-        <p><strong>Classe prevista:</strong> ${data.classe_prevista}</p>
-        <p><strong>Probabilidade:</strong> ${data.probabilidade}</p>
-        <p><strong>Cidade:</strong> ${data.clima?.cidade || '-'}</p>
-        <p><strong>Temperatura:</strong> ${data.clima?.temperatura ?? '-'}°C</p>
-        <p><strong>Condição:</strong> ${data.clima?.condicao || '-'}</p>
-        <p><strong>Chance de chuva:</strong> ${data.clima?.chance_chuva ?? '-'}%</p>
-        ${data.imagem_anotada_base64 ? `<img src="data:image/png;base64,${data.imagem_anotada_base64}" alt="Imagem Anotada" style="max-width:400px; margin-top:1rem;" />` : ''}
-      `;
-    } catch (error) {
-      alert(error.message);
-    }
-  };
+    };
 
     if (enviarBtn) enviarBtn.addEventListener('click', enviarHandler);
 
@@ -267,4 +255,3 @@ function Input() {
 }
 
 export default Input;
-
