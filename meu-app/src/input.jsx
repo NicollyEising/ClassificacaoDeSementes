@@ -96,7 +96,7 @@ function Input() {
       formData.append('usuario_id', usuarioId);
 
       try {
-        const response = await fetch('https://18.216.31.10:8000/processar_imagem', {
+        const response = await fetch('https://api.sementes.lat:8000/processar_imagem', {
           method: 'POST',
           body: formData
         });

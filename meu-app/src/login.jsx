@@ -60,7 +60,7 @@ function Input() {
         let backendResponded = false;
 
         try {
-          const res = await fetch('https://18.216.31.10:5000/login', {
+          const res = await fetch('https://api.sementes.lat:5000/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
