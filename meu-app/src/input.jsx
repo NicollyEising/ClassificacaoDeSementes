@@ -175,6 +175,7 @@ function Input() {
                   <Link className="item" to="/input">
                     <i className="boxes icon"></i>Enviar Arquivo
                   </Link>
+                <Link className="item" to="/modelo"><i className="book icon"></i>Modelo Utilizado</Link>
                 </div>
               </div>
             </div>

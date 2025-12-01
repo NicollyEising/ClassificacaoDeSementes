@@ -114,6 +114,8 @@ function MeuComponente() {
       navigate('/input', { replace: false }); // caminho absoluto
     } else if (nome === 'Defeitos') {
       navigate('/dashboard#Defeitos', { replace: false }); // caminho absoluto
+    } else if (nome === 'modelo') {
+      navigate('/modelo', { replace: false }); // caminho absoluto
     } else {
       setSecaoAtiva(nome);
       navigate('/dashboard', { replace: false }); // caminho absoluto
@@ -209,6 +211,13 @@ function MeuComponente() {
                   onClick={() => abrirSecao('Recomendacoes')}
                 >
                   <i className="boxes icon"></i>Enviar Arquivo
+                </button>
+                <button
+                  type="button"
+                  className={`item ${secaoAtiva === 'modelo' ? 'active' : ''}`}
+                  onClick={() => abrirSecao('modelo')}
+                >
+                  <i className="book icon"></i>Modelo Utilizado
                 </button>
               </div>
             </div>
