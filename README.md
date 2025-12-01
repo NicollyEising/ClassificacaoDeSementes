@@ -191,3 +191,7 @@ Para garantir equilíbrio entre classes e volume suficiente para o treinamento d
 ## Considerações Finais
 
 O sistema integra visão computacional, modelos generativos e serviços web para fornecer uma solução completa de análise de sementes. A utilização extensiva de imagens sintéticas geradas por VAE-GAN permitiu a formação de um dataset equilibrado, com 3.000 amostras por categoria, elevando a precisão e a robustez do modelo de classificação. A arquitetura modular possibilita expansão futura para novas espécies e funcionalidades.
+
+## Exemplo de Vídeo
+
+* https://drive.google.com/file/d/14_BBwP-Y4zHXcBo2EHNrdg_qXlk56qYB/view?usp=sharing
