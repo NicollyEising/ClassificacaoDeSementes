@@ -1,132 +1,193 @@
 # Sistema de Identificação e Análise de Sementes
 
-## Objetivo do Projeto
+Projeto de Visão Computacional para Classificação e Avaliação de Qualidade
 
-Desenvolver um sistema automatizado de classificação de sementes agrícolas, utilizando visão computacional e aprendizado de máquina, que permita identificar diferentes tipos de sementes (soja, trigo, quiabo, etc.) e avaliar sua qualidade com base em características como cor, tamanho, textura e presença de defeitos (mofo, fissuras, descoloração).
+## Objetivo
 
----
+O objetivo deste projeto é desenvolver um sistema automatizado de identificação e análise de sementes agrícolas, empregando técnicas de visão computacional, aprendizado de máquina e métodos de explicabilidade. O sistema realiza a classificação do tipo de semente, avalia sua qualidade, identifica defeitos visuais e apresenta os resultados em uma interface web responsiva com rastreabilidade por QR Code.
+
+O desenvolvimento do modelo de classificação foi apoiado por um conjunto de dados ampliado artificialmente. Para isso, foi utilizado um modelo VAE-GAN responsável pela geração de **3.000 imagens sintéticas por classe**, permitindo a construção de um dataset equilibrado, adequado ao treinamento da rede neural e essencial para alcançar maior precisão e robustez nas análises.
 
 ## Escopo
 
-**Classificação de sementes:**
-O sistema deve ser capaz de:
+### Funcionalidades Principais
 
-* Identificar o tipo de semente automaticamente.
-* Avaliar a qualidade das sementes.
-* Detectar defeitos em cada semente.
+**Classificação e Análise**
 
-**Interface do usuário:**
+* Identificação automática do tipo de semente.
+* Avaliação da qualidade com base em características visuais.
+* Detecção de defeitos, como mofo, fissuras e descoloração.
+* Segmentação de regiões afetadas por imperfeições.
 
-* Upload de imagens das sementes.
-* Visualização dos resultados de classificação e qualidade.
-* Histórico de análises realizadas.
+**Interface do Usuário**
 
-**Segurança e Privacidade:**
+* Upload de imagens.
+* Visualização dos resultados.
+* Histórico de análises.
+* Acesso a páginas de resultado via QR Code.
 
-* Armazenamento seguro das imagens e resultados.
-* Controle de acesso aos dados sensíveis.
+**Processamento e Armazenamento**
 
-**Testes e Validação:**
+* Armazenamento estruturado de imagens e resultados.
+* Geração de imagens sintéticas para ampliação do dataset.
 
-* Testes unitários e de integração para assegurar a precisão do modelo e funcionamento do sistema.
+**Integrações**
 
----
+* Consulta a APIs climáticas.
+* Recomendações baseadas em condições ambientais.
 
-## Tecnologias Utilizadas
+## Contexto
 
-**Frontend:**
+A avaliação manual da qualidade de sementes é suscetível a variabilidade e limitações operacionais. O emprego de visão computacional aumenta a precisão, reduz falhas e contribui para práticas de agricultura de precisão.
 
-* React: Construção de interfaces de usuário.
-* React Router: Navegação entre páginas.
-* Axios: Requisições HTTP ao backend.
-* HTML e CSS: Estrutura e estilização.
-* Tailwind CSS e Semantic UI: Framework para estilização rápida.
+## Restrições
 
-**Backend:**
+* Dependência da qualidade das imagens fornecidas pelo usuário.
+* Necessidade de conjuntos de dados equilibrados para cada classe.
+* Análise restrita a características visuais.
 
-* Python: Processamento de imagens e lógica do modelo.
-* Flask / FastAPI: Criação de APIs para comunicação com o frontend.
-* PyTorch / TensorFlow: Treinamento e execução do modelo de classificação.
-* OpenCV: Processamento e análise de imagens.
-* MongoDB / PostgreSQL: Armazenamento de resultados e imagens processadas.
+## Diferenciais
 
-**Testes e Qualidade:**
+* Aplicação de redes neurais convolucionais para classificação e segmentação.
+* Utilização de Grad-CAM para interpretabilidade.
+* Uso de VAE-GAN para geração de imagens sintéticas e balanceamento do dataset.
+* Disponibilização de resultados via QR Code.
 
-* PyTest: Testes unitários e integração.
-* SonarQube: Análise de qualidade do código.
+## Modelo Arquitetural
 
----
+O sistema compreende:
 
-## Requisitos do Projeto
+* **Frontend** em ReactJS, com páginas dinâmicas, visualização das análises e leitura de QR Code.
+* **Backend** em Python (FastAPI), responsável pelo processamento, inferência e integração com APIs externas.
+* **Banco de Dados** PostgreSQL para armazenamento de metadados e histórico.
+* **Infraestrutura em Nuvem** com frontend hospedado na Vercel e backend na AWS.
+
+## Requisitos
 
 ### Requisitos Funcionais
 
-* **RF1:** Upload de imagens pelo usuário.
-* **RF2:** Classificação automática da semente.
-* **RF3:** Avaliação da qualidade da semente.
-* **RF4:** Detecção de defeitos nas sementes.
-* **RF5:** Histórico de análises anteriores.
+* **RF1:** Upload de imagens.
+* **RF2:** Classificação automática.
+* **RF3:** Avaliação de qualidade.
+* **RF4:** Detecção e segmentação de defeitos.
+* **RF5:** Histórico de análises.
+* **RF6:** Geração de QR Code.
+* **RF7:** Página dinâmica com resultados e previsões ambientais.
+* **RF8:** Geração de imagens sintéticas com VAE-GAN.
 
 ### Requisitos Não Funcionais
 
-* **RNF1:** Segurança no armazenamento de imagens e resultados.
-* **RNF2:** Alta precisão e desempenho no processamento das imagens.
-* **RNF3:** Interface intuitiva e de fácil navegação.
-* **RNF4:** Código organizado e documentado para manutenção futura.
+* **RNF1:** Segurança de dados.
+* **RNF2:** Interface responsiva.
+* **RNF3:** Código modular e escalável.
+* **RNF4:** Acessibilidade conforme diretrizes WCAG 2.1.
 
----
+## Pilha Tecnológica
 
-## Metodologia de Organização de Tarefas
+**Frontend**
 
-O projeto adotará a metodologia **FDD (Feature Driven Development)**, com foco na entrega incremental de funcionalidades:
+* ReactJS
+* React Router
+* Tailwind CSS
+* Semantic UI
+* Axios
 
-* Cada funcionalidade (upload, classificação, análise de qualidade, histórico) será desenvolvida de forma independente, testada e validada.
-* Permite acompanhamento preciso do progresso e priorização das funcionalidades essenciais.
+**Backend**
 
----
+* Python
+* FastAPI
+* OpenCV
+* TensorFlow / PyTorch
+* PostgreSQL
 
-## Pacotes de Entrega
+**Ferramentas Adicionais**
 
-**Pacote 1: Configuração e Infraestrutura**
+* Trello
+* GitHub Actions
+* Vercel
+* AWS
 
-* Configuração do ambiente de desenvolvimento.
-* Estruturação do projeto (pastas e arquivos).
-* Integração entre backend e frontend.
+## Metodologia de Desenvolvimento
 
-**Pacote 2: Upload e Processamento de Imagens**
+Metodologia FDD, distribuída em pacotes:
 
-* Interface para upload de imagens de sementes.
-* Processamento inicial das imagens (pré-processamento e segmentação).
+**Pacote 1 – Configuração e Infraestrutura**
 
-**Pacote 3: Classificação e Avaliação**
+* Configuração inicial.
+* Estruturação do projeto.
+* Integração inicial entre frontend e backend.
 
-* Implementação do modelo de classificação de sementes.
-* Avaliação de qualidade e detecção de defeitos.
-* Armazenamento dos resultados no banco de dados.
+**Pacote 2 – Upload e Pré-processamento**
 
-**Pacote 4: Interface e Histórico**
+* Interface de envio.
+* Pré-processamento e segmentação básica.
 
-* Visualização dos resultados pelo usuário.
-* Histórico de análises.
-* Sistema de autenticação e segurança.
+**Pacote 3 – Classificação e Avaliação**
 
-**Pacote 5: Testes e Qualidade**
+* Modelos de classificação.
+* Detecção de defeitos.
+* Registro dos resultados.
 
-* Testes unitários e de integração do backend e frontend.
-* Monitoramento de qualidade do código.
-* Integração contínua (CI/CD).
+**Pacote 4 – Interface e Histórico**
 
----
+* Visualização completa das análises.
+* Histórico detalhado.
+* Implementação do QR Code.
+
+## Coleta de Dados
+
+### Conjuntos Utilizados
+
+* Soybean Seeds Classification Dataset (Kaggle).
+* Base própria com imagens coletadas.
+
+### Expansão e Balanceamento do Dataset (Ponto de Ênfase)
+
+Para garantir equilíbrio entre classes e volume suficiente para o treinamento da rede neural, o dataset final foi construído majoritariamente por meio de um modelo **VAE-GAN**, utilizado para geração de imagens sintéticas realistas.
+
+* Foram produzidas **3.000 imagens sintéticas por classe**, totalizando um conjunto amplo e balanceado.
+* O modelo foi responsável tanto pela ampliação quanto pela padronização visual dos exemplos, garantindo maior robustez no treinamento.
+
+## Treinamento de Modelos
+
+* Arquitetura principal: ResNet-50 com fine-tuning.
+* Parâmetros estimados: batch size 32, 50 épocas, taxa de aprendizado 1e-4.
+* Validação cruzada utilizando 5 folds.
+* Implementação adicional de VAE e VAE-GAN para síntese e melhoria do dataset.
+
+## Métricas de Avaliação
+
+* Acurácia global.
+* F1-score.
+* IoU para segmentação.
+
+## Interface Web
+
+* Tela de upload.
+* Página de análise contendo imagem, resultados, defeitos e dados ambientais.
+* Histórico com listagem e gráficos.
+* Página específica gerada via QR Code.
+
+## Monitoramento
+
+* Registro de logs.
+* Indicadores de desempenho da API.
+* Métricas de uso.
 
 ## Infraestrutura
 
 * **Frontend:** Vercel
 * **Backend:** AWS
-* **Banco de Dados:** PostgreSQL
-* **CI/CD:** GitHub
-* **Trello:** [https://trello.com/b/CmD4xiWe/tcc-sementes](https://trello.com/invite/b/685d4eeaf96fcde6078ed7f5/ATTI76bb8e9cc67c70b8f9d4caa659261bbb04B8600D/tcc-sementes)
+* **Banco:** PostgreSQL
+* **CI/CD:** GitHub Actions
+* **Planejamento:** Trello
 
----
+## Riscos e Mitigações
 
+* **Imagens de baixa qualidade:** aplicação de técnicas de pré-processamento.
+* **Imbalance de classes:** utilização de VAE-GAN para geração balanceada de dados.
+* **Integração entre módulos:** testes contínuos e versionamento.
 
+## Considerações Finais
 
+O sistema integra visão computacional, modelos generativos e serviços web para fornecer uma solução completa de análise de sementes. A utilização extensiva de imagens sintéticas geradas por VAE-GAN permitiu a formação de um dataset equilibrado, com 3.000 amostras por categoria, elevando a precisão e a robustez do modelo de classificação. A arquitetura modular possibilita expansão futura para novas espécies e funcionalidades.
