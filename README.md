@@ -1,12 +1,17 @@
 # Sistema de Identificação e Análise de Sementes
 
-Projeto de Visão Computacional para Classificação e Avaliação de Qualidade
+Projeto de Visão Computacional para Classificação
 
 ## Objetivo
 
 O objetivo deste projeto é desenvolver um sistema automatizado de identificação e análise de sementes agrícolas, empregando técnicas de visão computacional, aprendizado de máquina e métodos de explicabilidade. O sistema realiza a classificação do tipo de semente, avalia sua qualidade, identifica defeitos visuais e apresenta os resultados em uma interface web responsiva com rastreabilidade por QR Code.
 
 O desenvolvimento do modelo de classificação foi apoiado por um conjunto de dados ampliado artificialmente. Para isso, foi utilizado um modelo VAE-GAN responsável pela geração de **3.000 imagens sintéticas por classe**, permitindo a construção de um dataset equilibrado, adequado ao treinamento da rede neural e essencial para alcançar maior precisão e robustez nas análises.
+
+## Login
+
+* email: teste2@gmail.com
+* senha: 123456
 
 ## Escopo
 
@@ -106,6 +111,7 @@ O sistema compreende:
 * GitHub Actions
 * Vercel
 * AWS
+  
 
 ## Metodologia de Desenvolvimento
 
