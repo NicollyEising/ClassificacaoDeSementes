@@ -10,7 +10,7 @@ O desenvolvimento do modelo de classificação foi apoiado por um conjunto de da
 
 ## Diagramas
 
-[Diagrama]([https://github.com/usuario/repositorio](https://photos.fife.usercontent.google.com/pw/AP1GczPp4UTYun6XMsk5zbAwSD7335PA9lNRjBMIx6fZSDmhK66-KGb0I4l9=w945-h455-s-no-gm?authuser=0))
+[Diagrama](https://photos.fife.usercontent.google.com/pw/AP1GczPp4UTYun6XMsk5zbAwSD7335PA9lNRjBMIx6fZSDmhK66-KGb0I4l9=w945-h455-s-no-gm?authuser=0)
 
 
 ## Login
