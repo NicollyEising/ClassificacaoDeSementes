@@ -8,6 +8,11 @@ O objetivo deste projeto é desenvolver um sistema automatizado de identificaç�
 
 O desenvolvimento do modelo de classificação foi apoiado por um conjunto de dados ampliado artificialmente. Para isso, foi utilizado um modelo VAE-GAN responsável pela geração de **3.000 imagens sintéticas por classe**, permitindo a construção de um dataset equilibrado, adequado ao treinamento da rede neural e essencial para alcançar maior precisão e robustez nas análises.
 
+## Diagramas
+
+[Diagrama]([https://github.com/usuario/repositorio](https://photos.fife.usercontent.google.com/pw/AP1GczPp4UTYun6XMsk5zbAwSD7335PA9lNRjBMIx6fZSDmhK66-KGb0I4l9=w945-h455-s-no-gm?authuser=0))
+
+
 ## Login
 
 * email: teste2@gmail.com
