@@ -85,7 +85,6 @@ O sistema compreende:
 * **RNF1:** Segurança de dados.
 * **RNF2:** Interface responsiva.
 * **RNF3:** Código modular e escalável.
-* **RNF4:** Acessibilidade conforme diretrizes WCAG 2.1.
 
 ## Pilha Tecnológica
 
